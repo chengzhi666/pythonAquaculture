@@ -1,0 +1,53 @@
+{
+  "project_name": "渔业情报平台",
+  "sources": [
+    {
+      "id": "cnki",
+      "name": "知网文献",
+      "enabled": true,
+      "module": "crawlers.cnki_crawler",
+      "function": "crawl_cnki",
+      "params": {
+        "theme": "水产养殖",
+        "papers_need": 20
+      },
+      "defaults": {
+        "source_type": "CNKI",
+        "region": "中国-全国"
+      }
+    },
+    {
+      "id": "moa_yyj_tzgg",
+      "name": "渔业渔政管理局-通知公告",
+      "enabled": true,
+      "module": "crawlers.moa_fishery_crawler",
+      "function": "crawl_moa_fishery_tzgg",
+      "params": {
+        "max_pages": 1
+      },
+      "defaults": {
+        "source_type": "MOA_FISHERY_TZGG",
+        "org": "农业农村部渔业渔政管理局",
+        "region": "中国-全国"
+      }
+    },
+    {
+      "id": "scholar",
+      "name": "学术检索(Semantic Scholar)",
+      "enabled": true,
+      "module": "crawlers.scholar_crawler",
+      "function": "crawl_scholar",
+      "params": {
+        "query": "aquaculture recirculating aquaculture system",
+        "limit": 30,
+        "year_from": 2020,
+        "min_interval": 0.6
+      },
+      "defaults": {
+        "source_type": "SCHOLAR",
+        "org": "Semantic Scholar",
+        "region": "全球"
+      }
+    }
+  ]
+}
