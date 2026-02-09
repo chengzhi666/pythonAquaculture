@@ -77,15 +77,3 @@ CREATE TABLE IF NOT EXISTS paper_meta (
   UNIQUE KEY uk_paper_url (url(150)),
   CONSTRAINT fk_paper_raw FOREIGN KEY (raw_id) REFERENCES raw_event(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS form_schema (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  portal_url TEXT NULL,
-  page_url TEXT NOT NULL,
-  form_name VARCHAR(255) NULL,
-  fields_json LONGTEXT NOT NULL,
-  fetched_at DATETIME NOT NULL,
-  raw_id BIGINT NULL,
-  UNIQUE KEY uk_page_url (page_url(150)),
-  CONSTRAINT fk_form_raw FOREIGN KEY (raw_id) REFERENCES raw_event(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -2,7 +2,6 @@ import sys
 import traceback
 
 from common.db import finish_crawl_run, get_conn, insert_crawl_run
-from jobs.crawl_bj_form import run as run_bj
 from jobs.crawl_cnki import run as run_cnki
 from jobs.crawl_jd import run as run_jd
 from jobs.crawl_moa_fishery import run as run_moa
@@ -13,7 +12,6 @@ JOB_MAP = {
     "taobao": run_taobao,
     "moa": run_moa,
     "cnki": run_cnki,
-    "bjform": run_bj,
 }
 
 

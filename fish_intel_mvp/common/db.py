@@ -158,26 +158,3 @@ def upsert_paper(conn, item):
                 item.get("raw_id"),
             ),
         )
-
-
-def upsert_form_schema(conn, item):
-    sql = """
-    INSERT INTO form_schema(
-      portal_url, page_url, form_name, fields_json, fetched_at, raw_id
-    ) VALUES (%s,%s,%s,%s,%s,%s)
-    ON DUPLICATE KEY UPDATE
-      fields_json=VALUES(fields_json),
-      raw_id=VALUES(raw_id)
-    """
-    with conn.cursor() as cur:
-        cur.execute(
-            sql,
-            (
-                item.get("portal_url"),
-                item["page_url"],
-                item.get("form_name"),
-                item["fields_json"],
-                now(),
-                item.get("raw_id"),
-            ),
-        )
