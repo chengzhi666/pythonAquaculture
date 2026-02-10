@@ -5,14 +5,19 @@ __pycache__/
 *.pyd
 *.so
 *.egg-info/
+*.egg/
 
 # Virtual environments
 .venv/
 venv/
+env/
 
 # IDE / editor
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
@@ -20,6 +25,7 @@ Thumbs.db
 
 # Local configuration / secrets
 .env
+.env.local
 *.env
 fish_intel_mvp/.env
 
@@ -30,4 +36,19 @@ fish_intel_mvp/.env
 *.log
 jd_debug.html
 fish_intel_mvp/jd_debug.html
+fish_intel_mvp/logs/
 
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+.pre-commit-cache/
+.pre-commit-cache-run/
+
+# Build
+build/
+dist/
+*.whl
+*.tar.gz

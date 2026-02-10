@@ -4,7 +4,6 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List
 from urllib.parse import urljoin
 
 import requests
@@ -49,9 +48,7 @@ def _build_session() -> requests.Session:
     return session
 
 
-def _fetch_text(
-    session: requests.Session, url: str, timeout: int = 20, retries: int = 2
-) -> str:
+def _fetch_text(session: requests.Session, url: str, timeout: int = 20, retries: int = 2) -> str:
     last_err = None
     for _ in range(retries + 1):
         try:
@@ -71,13 +68,13 @@ def _list_url(page_index: int) -> str:
     return f"{BASE_URL}/tzgg/index_{page_index}.htm"
 
 
-def _parse_list(html: str, list_url: str) -> List[Dict]:
+def _parse_list(html: str, list_url: str) -> list[dict]:
     soup = BeautifulSoup(html, "lxml")
     ul = soup.select_one("div.sj_e_tonzhi_list ul#div") or soup.select_one("ul#div")
     if not ul:
         return []
 
-    records: List[Dict] = []
+    records: list[dict] = []
     for li in ul.find_all("li"):
         a = li.find("a")
         if not a:
@@ -115,7 +112,7 @@ def _parse_list(html: str, list_url: str) -> List[Dict]:
     return records
 
 
-def _extract_meta(full_text: str) -> Dict[str, str]:
+def _extract_meta(full_text: str) -> dict[str, str]:
     text = _clean_text(full_text)
     meta = {"pub_time": "", "author": "", "source": ""}
 
@@ -138,7 +135,7 @@ def _extract_meta(full_text: str) -> Dict[str, str]:
     return meta
 
 
-def _parse_detail(html: str, fallback_title: str, fallback_pub_time: str) -> Dict[str, str]:
+def _parse_detail(html: str, fallback_title: str, fallback_pub_time: str) -> dict[str, str]:
     soup = BeautifulSoup(html, "lxml")
     h1 = soup.find("h1")
     title = _clean_text(h1.get_text(" ", strip=True)) if h1 else _clean_text(fallback_title)
@@ -150,12 +147,12 @@ def _parse_detail(html: str, fallback_title: str, fallback_pub_time: str) -> Dic
         or soup.select_one("div.content")
     )
     if content_node:
-        paragraphs = [
-            _clean_text(p.get_text(" ", strip=True)) for p in content_node.find_all("p")
-        ]
+        paragraphs = [_clean_text(p.get_text(" ", strip=True)) for p in content_node.find_all("p")]
         paragraphs = [p for p in paragraphs if p]
-        content = "\n".join(paragraphs) if paragraphs else _clean_text(
-            content_node.get_text("\n", strip=True)
+        content = (
+            "\n".join(paragraphs)
+            if paragraphs
+            else _clean_text(content_node.get_text("\n", strip=True))
         )
     else:
         content = _clean_text(soup.get_text("\n", strip=True))

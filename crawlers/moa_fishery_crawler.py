@@ -1,9 +1,10 @@
 import re
 import time
-import requests
-from requests import RequestException
-from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+
+import requests
+from bs4 import BeautifulSoup
+from requests import RequestException
 
 BASE_URL = "https://yyj.moa.gov.cn"
 LIST_FIRST = "https://yyj.moa.gov.cn/tzgg/index.htm"
@@ -47,11 +48,13 @@ def parse_tzgg_list(html: str, list_url: str):
         # 把相对路径补成绝对 URL（处理 ./ 和 ../ 这两种情况）
         detail_url = urljoin(list_url, href)
 
-        results.append({
-            "title": title,
-            "pub_time": pub_time,
-            "url": detail_url,
-        })
+        results.append(
+            {
+                "title": title,
+                "pub_time": pub_time,
+                "url": detail_url,
+            }
+        )
 
     return results
 
@@ -109,7 +112,7 @@ def fetch_tzgg_detail(base: dict) -> dict:
         title = base["title"]
 
     # 2. 元信息：日期 / 作者 / 来源
-    pub_time = base["pub_time"]      # 默认用列表页的日期
+    pub_time = base["pub_time"]  # 默认用列表页的日期
     author = ""
     source = "渔业渔政管理局"
 
@@ -174,15 +177,15 @@ def fetch_tzgg_detail(base: dict) -> dict:
 
 def to_intel_item(base: dict) -> dict:
     return {
-        "title":       base["title"],
-        "content":     "",  # 这里暂时先不抓详情页正文，后面再补
-        "pub_time":    base["pub_time"],
-        "region":      "中国-全国",
-        "org":         "农业农村部渔业渔政管理局",
+        "title": base["title"],
+        "content": "",  # 这里暂时先不抓详情页正文，后面再补
+        "pub_time": base["pub_time"],
+        "region": "中国-全国",
+        "org": "农业农村部渔业渔政管理局",
         "source_type": "MOA_FISHERY_TZGG",
-        "source_url":  base["url"],
-        "tags":        [],
-        "extra":       {},
+        "source_url": base["url"],
+        "tags": [],
+        "extra": {},
     }
 
 
@@ -216,14 +219,14 @@ def crawl_moa_fishery_tzgg(max_pages: int = 1) -> list[dict]:
                 continue
 
             intel_item = {
-                "title":       detail["title"],
-                "content":     detail["content"],
-                "pub_time":    detail["pub_time"],
-                "region":      "中国-全国",
-                "org":         detail["source"] or "农业农村部渔业渔政管理局",
+                "title": detail["title"],
+                "content": detail["content"],
+                "pub_time": detail["pub_time"],
+                "region": "中国-全国",
+                "org": detail["source"] or "农业农村部渔业渔政管理局",
                 "source_type": "MOA_FISHERY_TZGG",
-                "source_url":  base["url"],
-                "tags":        [],  # 后面可以根据标题加“养殖政策/环境/疫病”等标签
+                "source_url": base["url"],
+                "tags": [],  # 后面可以根据标题加“养殖政策/环境/疫病”等标签
                 "extra": {
                     "author": detail["author"],
                     "channel": "通知公告",

@@ -1,0 +1,103 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pythonAquaculture"
+version = "0.1.0"
+description = "水产情报采集 MVP"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    {name = "Your Name", email = "your.email@example.com"},
+]
+keywords = ["aquaculture", "crawler", "intelligence"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "requests>=2.32.0,<3.0",
+    "beautifulsoup4>=4.12.0,<5.0",
+    "lxml>=5.0.0,<6.0",
+    "pymysql>=1.0.0,<2.0",
+    "python-dotenv>=1.0.0,<2.0",
+    "pandas>=2.0.0,<3.0",
+    "selenium>=4.10.0,<5.0",
+    "DrissionPage>=4.0,<5.0",
+    "streamlit>=1.30.0,<2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0,<8.0",
+    "pytest-cov>=4.0.0,<5.0",
+    "black>=23.0.0,<25.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0,<2.0",
+    "pre-commit>=3.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/pythonAquaculture"
+Documentation = "https://github.com/yourusername/pythonAquaculture/wiki"
+Repository = "https://github.com/yourusername/pythonAquaculture"
+Issues = "https://github.com/yourusername/pythonAquaculture/issues"
+
+[tool.setuptools]
+packages = ["crawlers", "storage", "query", "fish_intel_mvp"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.git
+  | \.venv
+  | \.vscode
+  | __pycache__
+  | \.pytest_cache
+)/
+'''
+
+[tool.pylint]
+max-line-length = 100
+disable = ["missing-docstring", "too-many-arguments"]
+good-names = ["i", "j", "k", "ex", "Run", "_"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-v --cov=crawlers --cov=storage --cov-report=term-missing"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+extend-exclude = [".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "A", "C4"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["F401", "E501"]
+
+[tool.ruff.format]
+quote-style = "double"

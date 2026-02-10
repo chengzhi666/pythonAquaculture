@@ -1,9 +1,8 @@
-import time
 import hashlib
-from typing import Any, Dict, List, Optional
+import time
+from typing import Any, Optional, Union
 
 import requests
-
 
 API_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 
@@ -20,14 +19,14 @@ def crawl_scholar(
     limit: int = 20,
     year_from: Optional[int] = None,
     min_interval: float = 0.6,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Academic search source via Semantic Scholar API.
     Returns list[dict] aligned with intel_item fields:
       title/content/pub_time/region/org/source_type/source_url/extra(optional)
     """
     limit = max(1, min(int(limit), 100))
-    params = {
+    params: dict[str, Union[str, int]] = {
         "query": query,
         "limit": limit,
         "fields": "title,abstract,year,authors,url,venue,citationCount,publicationDate,externalIds",
@@ -37,7 +36,7 @@ def crawl_scholar(
     r.raise_for_status()
     data = r.json()
 
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for p in data.get("data", []) or []:
         title = (p.get("title") or "").strip()
         if not title:
@@ -62,17 +61,17 @@ def crawl_scholar(
                 "title": title,
                 "content": content,
                 "pub_time": pub_time,
+                "region": "全球",
+                "org": "Semantic Scholar",
+                "source_type": "SCHOLAR",
                 "source_url": source_url,
+                "tags": [],
                 "extra": {
                     "query": query,
                     "year": year,
                     "venue": p.get("venue"),
                     "citationCount": p.get("citationCount"),
-                    "authors": [
-                        a.get("name")
-                        for a in (p.get("authors") or [])
-                        if a.get("name")
-                    ],
+                    "authors": [a.get("name") for a in (p.get("authors") or []) if a.get("name")],
                     "paper_url": url,
                     "externalIds": p.get("externalIds") or {},
                 },

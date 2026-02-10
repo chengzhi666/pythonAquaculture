@@ -5,7 +5,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional, Union
 from urllib.parse import quote_plus
 
 from bs4 import BeautifulSoup
@@ -197,14 +197,10 @@ def _extract_item_from_row(row):
         _row_text_now(row, "css:.p-name a"),
         _row_text_now(row, "css:.p-name"),
     )
-    link_ele = _row_ele_now(row, "css:.p-name a") or _row_ele_now(
-        row, "css:.p-name-type-2 a"
-    )
+    link_ele = _row_ele_now(row, "css:.p-name a") or _row_ele_now(row, "css:.p-name-type-2 a")
     href = ""
     if link_ele:
-        href = (link_ele.attr("href") or "").strip() or (
-            link_ele.attr("data-href") or ""
-        ).strip()
+        href = (link_ele.attr("href") or "").strip() or (link_ele.attr("data-href") or "").strip()
     detail_url = _normalize_url(href)
     if not title or not detail_url:
         return None
@@ -247,11 +243,11 @@ def _extract_item_from_row(row):
     }
 
 
-def _extract_items_from_page(dp: ChromiumPage) -> List[Dict]:
+def _extract_items_from_page(dp: ChromiumPage) -> list[dict]:
     rows = _get_product_rows(dp)
     if not rows:
         return []
-    items: List[Dict] = []
+    items: list[dict] = []
     seen = set()
     for row in rows:
         result = _extract_item_from_row(row)
@@ -265,7 +261,7 @@ def _extract_items_from_page(dp: ChromiumPage) -> List[Dict]:
     return items
 
 
-def _extract_items_from_html(dp: ChromiumPage) -> List[Dict]:
+def _extract_items_from_html(dp: ChromiumPage) -> list[dict]:
     try:
         html = dp.html or ""
     except Exception:
@@ -274,7 +270,7 @@ def _extract_items_from_html(dp: ChromiumPage) -> List[Dict]:
         return []
 
     soup = BeautifulSoup(html, "lxml")
-    items: List[Dict] = []
+    items: list[dict] = []
     seen_urls = set()
 
     # New structure first.
@@ -443,7 +439,7 @@ def _go_next_page(dp: ChromiumPage) -> bool:
     return False
 
 
-def run(conn, keywords: Optional[List[str]] = None, pages: Optional[int] = None) -> int:
+def run(conn, keywords: Optional[list[str]] = None, pages: Optional[int] = None) -> int:
     source_name = "jd"
     keywords = keywords or [
         k.strip() for k in os.getenv("JD_KEYWORDS", "大黄鱼").split(",") if k.strip()
@@ -451,7 +447,12 @@ def run(conn, keywords: Optional[List[str]] = None, pages: Optional[int] = None)
     if not keywords:
         keywords = ["大黄鱼"]
 
-    page_count = int(pages or os.getenv("JD_PAGES", "1"))
+    page_count_raw: Union[str, int]
+    if pages is None:
+        page_count_raw = os.getenv("JD_PAGES", "1")
+    else:
+        page_count_raw = pages
+    page_count = int(page_count_raw)
     page_count = max(1, page_count)
     login_wait_seconds = max(0, int(os.getenv("JD_LOGIN_WAIT_SECONDS", "20")))
     max_items_per_page = max(1, int(os.getenv("JD_MAX_ITEMS_PER_PAGE", "40")))

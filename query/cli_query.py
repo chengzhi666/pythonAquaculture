@@ -1,12 +1,16 @@
-from storage.db import get_conn, DB_PATH   # 放在文件最上面
+from typing import cast
+
+from storage.db import DB_PATH, get_conn  # 放在文件最上面
+
+QueryRow = tuple[str, str, str, str, str, str]
 
 
-def query_intel(keyword: str = "", order_by: str = "time"):
+def query_intel(keyword: str = "", order_by: str = "time") -> list[QueryRow]:
     conn = get_conn()
     cur = conn.cursor()
 
     sql = "SELECT pub_time, region, org, title, source_type, source_url FROM intel_item"
-    params = []
+    params: list[str] = []
 
     if keyword:
         sql += " WHERE title LIKE ? OR content LIKE ?"
@@ -23,10 +27,9 @@ def query_intel(keyword: str = "", order_by: str = "time"):
         sql += " ORDER BY pub_time DESC"
 
     cur.execute(sql, params)
-    rows = cur.fetchall()
+    rows = cast(list[QueryRow], cur.fetchall())
     conn.close()
     return rows
-
 
 
 if __name__ == "__main__":
@@ -51,4 +54,3 @@ if __name__ == "__main__":
         print("-" * 80)
 
     print("当前数据库文件：", DB_PATH)
-

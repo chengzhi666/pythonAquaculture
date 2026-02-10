@@ -1,4 +1,4 @@
-from storage.db import get_conn, DB_PATH
+from storage.db import DB_PATH, get_conn
 
 if __name__ == "__main__":
     conn = get_conn()

@@ -1,6 +1,6 @@
-import json
 import importlib
-from typing import Any, Dict, List, Optional
+import json
+from typing import Any, Optional
 
 from storage.db import init_db, save_items
 
@@ -11,7 +11,7 @@ def _import_func(module_name: str, func_name: str):
     return fn
 
 
-def _normalize_items(items: List[dict], defaults: Dict[str, Any]) -> List[dict]:
+def _normalize_items(items: list[dict], defaults: dict[str, Any]) -> list[dict]:
     """
     给 item 补默认字段，且过滤掉没有 source_url 的条目（否则无法入库去重）
     """
@@ -35,17 +35,17 @@ def _normalize_items(items: List[dict], defaults: Dict[str, Any]) -> List[dict]:
 
 def run_from_config(
     config_path: str = "config/sites.json",
-    overrides: Optional[Dict[str, Any]] = None,
+    overrides: Optional[dict[str, Any]] = None,
     save_to_db: bool = True,
-) -> List[dict]:
+) -> list[dict]:
     overrides = overrides or {}
     init_db()
 
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         cfg = json.load(f)
 
-    all_items: List[dict] = []
-    stats: Dict[str, int] = {}
+    all_items: list[dict] = []
+    stats: dict[str, int] = {}
 
     for src in cfg.get("sources", []):
         if not src.get("enabled", False):
@@ -61,7 +61,7 @@ def run_from_config(
         for k, v in overrides.items():
             prefix = f"{sid}."
             if k.startswith(prefix):
-                p = k[len(prefix):]
+                p = k[len(prefix) :]
                 params[p] = v
 
         print(f"[RUN] {sid} {module_name}.{func_name} params={params}")

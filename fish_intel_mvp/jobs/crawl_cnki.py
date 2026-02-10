@@ -4,14 +4,16 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List
+from typing import cast
 from urllib.parse import urljoin
 
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.edge.service import Service
-from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.remote.webdriver import WebDriver
+from selenium.webdriver.remote.webelement import WebElement
+from selenium.webdriver.support import expected_conditions as EC  # noqa: N812
 from selenium.webdriver.support.ui import WebDriverWait
 
 try:
@@ -32,7 +34,7 @@ def _clean_text(text: str) -> str:
     return (text or "").replace("\u3000", " ").strip()
 
 
-def _split_keywords(text: str) -> List[str]:
+def _split_keywords(text: str) -> list[str]:
     text = _clean_text(text)
     if not text:
         return []
@@ -61,8 +63,7 @@ def _build_driver():
 
     # Optional driver path, keep empty to let Selenium Manager resolve automatically.
     driver_path = (
-        os.getenv("EDGE_DRIVER_PATH", "").strip()
-        or os.getenv("CHROME_DRIVER_PATH", "").strip()
+        os.getenv("EDGE_DRIVER_PATH", "").strip() or os.getenv("CHROME_DRIVER_PATH", "").strip()
     )
     if driver_path:
         service = Service(driver_path)
@@ -97,9 +98,7 @@ def _open_search_result(driver, theme: str) -> None:
     search_btn.click()
 
     wait.until(
-        EC.presence_of_element_located(
-            (By.CSS_SELECTOR, "table.result-table-list tbody tr")
-        )
+        EC.presence_of_element_located((By.CSS_SELECTOR, "table.result-table-list tbody tr"))
     )
 
 
@@ -110,8 +109,10 @@ def _row_text(row, selector: str) -> str:
         return ""
 
 
-def _extract_list_rows(driver) -> List:
-    return driver.find_elements(By.CSS_SELECTOR, "table.result-table-list tbody tr")
+def _extract_list_rows(driver: WebDriver) -> list[WebElement]:
+    return cast(
+        list[WebElement], driver.find_elements(By.CSS_SELECTOR, "table.result-table-list tbody tr")
+    )
 
 
 def _safe_switch_detail_window(driver, original_handle: str) -> None:
@@ -123,15 +124,18 @@ def _safe_switch_detail_window(driver, original_handle: str) -> None:
         driver.switch_to.window(original_handle)
 
 
-def _extract_detail(driver, list_meta: Dict) -> Dict:
+def _extract_detail(driver, list_meta: dict) -> dict:
     wait = WebDriverWait(driver, 20)
     title = list_meta["list_title"]
     try:
-        title = _clean_text(
-            wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div.wxTitle h1, h1"))
-            ).text
-        ) or title
+        title = (
+            _clean_text(
+                wait.until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "div.wxTitle h1, h1"))
+                ).text
+            )
+            or title
+        )
     except Exception:
         pass
 
@@ -209,9 +213,7 @@ def _go_back_to_list(driver, original_handle: str) -> None:
         else:
             driver.back()
         WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "table.result-table-list tbody tr")
-            )
+            EC.presence_of_element_located((By.CSS_SELECTOR, "table.result-table-list tbody tr"))
         )
     except Exception:
         pass
