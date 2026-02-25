@@ -45,7 +45,7 @@ def _split_keywords(text: str) -> list[str]:
         text,
         flags=re.I,
     )
-    text = text.replace("\uFF1B", ";").replace("\uFF0C", ",").replace("\u3001", ",")
+    text = text.replace("\uff1b", ";").replace("\uff0c", ",").replace("\u3001", ",")
     parts = re.split(r"[;,\s]+", text)
     return [p.strip() for p in parts if p.strip()]
 

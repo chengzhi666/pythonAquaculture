@@ -261,7 +261,9 @@ class DbBackedExtractor:
                     pass
 
     @staticmethod
-    def _query_with_conn(conn, sql: str, args: Optional[tuple[Any, ...]] = None) -> list[dict[str, Any]]:
+    def _query_with_conn(
+        conn, sql: str, args: Optional[tuple[Any, ...]] = None
+    ) -> list[dict[str, Any]]:
         with conn.cursor() as cur:
             cur.execute(sql, args or ())
             rows = cur.fetchall()
@@ -289,7 +291,9 @@ class ProductTypeExtractor(DbBackedExtractor):
             try:
                 regex = re.compile(pattern, re.IGNORECASE)
             except re.error as exc:
-                LOGGER.warning("invalid product type regex skipped: pattern=%s err=%s", pattern, exc)
+                LOGGER.warning(
+                    "invalid product type regex skipped: pattern=%s err=%s", pattern, exc
+                )
                 continue
 
             compiled.append(
@@ -429,7 +433,9 @@ class SpecExtractor(DbBackedExtractor):
 
         unit_rule = self._match_unit_rule(unit_text)
         gram_factor = _to_float(unit_rule.get("gram_factor"), 1.0) if unit_rule else 1.0
-        normalized_unit = _coalesce_str(unit_rule.get("normalized_unit")) if unit_rule else unit_text
+        normalized_unit = (
+            _coalesce_str(unit_rule.get("normalized_unit")) if unit_rule else unit_text
+        )
 
         spec_weight_grams = weight_value * gram_factor
         total_grams = spec_weight_grams * count
@@ -501,7 +507,12 @@ class OriginExtractor(DbBackedExtractor):
     ) -> dict[str, Any]:
         self.refresh()
         merged_text = " ".join(
-            [_coalesce_str(title), _coalesce_str(origin_text), _coalesce_str(province), _coalesce_str(city)]
+            [
+                _coalesce_str(title),
+                _coalesce_str(origin_text),
+                _coalesce_str(province),
+                _coalesce_str(city),
+            ]
         ).strip()
 
         for rule in self._cache:

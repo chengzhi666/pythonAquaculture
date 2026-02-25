@@ -2,14 +2,15 @@ import logging
 import sys
 import traceback
 
-logger = logging.getLogger(__name__)
-
 from common.db import finish_crawl_run, get_conn, insert_crawl_run
 from jobs.crawl_cnki import run as run_cnki
 from jobs.crawl_jd import run as run_jd
 from jobs.crawl_moa_fishery import run as run_moa
-from jobs.crawl_salmon import crawl_jd_salmon, crawl_taobao_salmon, run as run_salmon
+from jobs.crawl_salmon import crawl_jd_salmon, crawl_taobao_salmon
+from jobs.crawl_salmon import run as run_salmon
 from jobs.crawl_taobao import run as run_taobao
+
+logger = logging.getLogger(__name__)
 
 JOB_MAP = {
     "jd": run_jd,

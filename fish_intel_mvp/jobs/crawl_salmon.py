@@ -183,7 +183,9 @@ def crawl_jd_salmon(
 
 
 def run(conn) -> int:
-    platforms = {item.lower() for item in _split_env_list(os.getenv("SALMON_PLATFORMS", "taobao,jd"))}
+    platforms = {
+        item.lower() for item in _split_env_list(os.getenv("SALMON_PLATFORMS", "taobao,jd"))
+    }
     if not platforms:
         platforms = {"taobao", "jd"}
 

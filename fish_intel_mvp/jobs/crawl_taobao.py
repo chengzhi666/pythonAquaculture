@@ -425,7 +425,9 @@ def run(
     if not keywords:
         keywords = ["salmon"]
 
-    max_pages = max(1, int(pages)) if pages is not None else max(1, int(os.getenv("TAOBAO_PAGES", "1")))
+    max_pages = (
+        max(1, int(pages)) if pages is not None else max(1, int(os.getenv("TAOBAO_PAGES", "1")))
+    )
     page_size = max(1, min(50, int(os.getenv("TAOBAO_PAGE_SIZE", "50"))))
     max_items = max(1, int(os.getenv("TAOBAO_MAX_ITEMS", "500")))
     sleep_seconds = max(0.0, float(os.getenv("TAOBAO_SLEEP_SECONDS", "1.0")))
@@ -493,7 +495,9 @@ def run(
                     products, raw_text = [], ""
                     break
                 except Exception as exc:  # noqa: BLE001
-                    LOGGER.warning("taobao page failed: keyword=%s page=%s err=%s", keyword, page, exc)
+                    LOGGER.warning(
+                        "taobao page failed: keyword=%s page=%s err=%s", keyword, page, exc
+                    )
                     products, raw_text = [], ""
                     break
 
@@ -501,7 +505,9 @@ def run(
                 LOGGER.info("taobao empty page: keyword=%s page=%s", keyword, page)
                 break
 
-            LOGGER.info("taobao page parsed: keyword=%s page=%s items=%s", keyword, page, len(products))
+            LOGGER.info(
+                "taobao page parsed: keyword=%s page=%s items=%s", keyword, page, len(products)
+            )
             raw_text_trimmed = raw_text[:raw_text_max_chars] if raw_text_max_chars > 0 else None
 
             for idx, product in enumerate(products, start=1):
@@ -512,21 +518,24 @@ def run(
                 enriched: dict[str, Any] = {}
                 if enrich_item_fn is not None:
                     try:
-                        enriched = enrich_item_fn(
-                            {
-                                "platform": "taobao",
-                                "keyword": keyword,
-                                "title": product["title"],
-                                "price": product["price"],
-                                "original_price": product["original_price"],
-                                "sales_or_commit": product["sales_or_commit"],
-                                "shop": product["shop"],
-                                "province": product["province"],
-                                "city": product["city"],
-                                "detail_url": product["detail_url"],
-                                "category": product["category"],
-                            }
-                        ) or {}
+                        enriched = (
+                            enrich_item_fn(
+                                {
+                                    "platform": "taobao",
+                                    "keyword": keyword,
+                                    "title": product["title"],
+                                    "price": product["price"],
+                                    "original_price": product["original_price"],
+                                    "sales_or_commit": product["sales_or_commit"],
+                                    "shop": product["shop"],
+                                    "province": product["province"],
+                                    "city": product["city"],
+                                    "detail_url": product["detail_url"],
+                                    "category": product["category"],
+                                }
+                            )
+                            or {}
+                        )
                     except Exception as exc:  # noqa: BLE001
                         LOGGER.warning(
                             "taobao enrich failed: keyword=%s page=%s idx=%s err=%s",

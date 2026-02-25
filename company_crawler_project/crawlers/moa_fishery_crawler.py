@@ -1,14 +1,14 @@
 import logging
 import re
 import time
-
-logger = logging.getLogger(__name__)
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 from requests import RequestException
 
 from crawlers.utils import DEFAULT_TIMEOUT, create_session
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://yyj.moa.gov.cn"
 LIST_FIRST = "https://yyj.moa.gov.cn/tzgg/index.htm"

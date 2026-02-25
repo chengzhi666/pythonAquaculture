@@ -13,7 +13,6 @@ from fish_intel_mvp.common.extract_rules import (
     SpecExtractor,
 )
 
-
 # ==================== 品种识别 ====================
 
 

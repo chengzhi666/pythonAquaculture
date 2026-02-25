@@ -91,7 +91,9 @@ def upsert_product_snapshot(conn, item):
         "city": item.get("city"),
         "detail_url": item["detail_url"],
         "category": item.get("category"),
-        "product_type": str(item.get("product_type") or item.get("keyword") or "unknown").strip()[:64],
+        "product_type": str(item.get("product_type") or item.get("keyword") or "unknown").strip()[
+            :64
+        ],
         "product_type_confidence": item.get("product_type_confidence"),
         "product_type_rule_id": item.get("product_type_rule_id"),
         "spec_raw": item.get("spec_raw"),
@@ -257,7 +259,9 @@ def calc_price_change(
     baseline = _latest_price(baseline_dt)
 
     latest_price = float(latest["price"]) if latest and latest.get("price") is not None else None
-    baseline_price = float(baseline["price"]) if baseline and baseline.get("price") is not None else None
+    baseline_price = (
+        float(baseline["price"]) if baseline and baseline.get("price") is not None else None
+    )
     pct_change = None
     if latest_price is not None and baseline_price is not None and baseline_price > 0:
         pct_change = round(((latest_price - baseline_price) / baseline_price) * 100.0, 4)

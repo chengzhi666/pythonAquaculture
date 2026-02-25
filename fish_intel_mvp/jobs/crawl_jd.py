@@ -541,21 +541,24 @@ def run(
                     enriched: dict[str, Any] = {}
                     if enrich_item_fn is not None:
                         try:
-                            enriched = enrich_item_fn(
-                                {
-                                    "platform": "jd",
-                                    "keyword": keyword,
-                                    "title": item["title"],
-                                    "price": item["price"],
-                                    "original_price": item["original_price"],
-                                    "sales_or_commit": item["sales_or_commit"],
-                                    "shop": item["shop"],
-                                    "province": item["province"],
-                                    "city": item["city"],
-                                    "detail_url": item["detail_url"],
-                                    "category": item["category"],
-                                }
-                            ) or {}
+                            enriched = (
+                                enrich_item_fn(
+                                    {
+                                        "platform": "jd",
+                                        "keyword": keyword,
+                                        "title": item["title"],
+                                        "price": item["price"],
+                                        "original_price": item["original_price"],
+                                        "sales_or_commit": item["sales_or_commit"],
+                                        "shop": item["shop"],
+                                        "province": item["province"],
+                                        "city": item["city"],
+                                        "detail_url": item["detail_url"],
+                                        "category": item["category"],
+                                    }
+                                )
+                                or {}
+                            )
                         except Exception as exc:  # noqa: BLE001
                             LOGGER.warning(
                                 "jd enrich failed: keyword=%s page=%s idx=%s err=%s",

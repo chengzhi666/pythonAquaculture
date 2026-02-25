@@ -40,12 +40,8 @@ def init_db(db_path: Optional[Path] = None) -> None:
             )
             """
         )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_intel_pub_time ON intel_item(pub_time DESC)"
-        )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_intel_source_type ON intel_item(source_type)"
-        )
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_intel_pub_time ON intel_item(pub_time DESC)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_intel_source_type ON intel_item(source_type)")
         conn.commit()
     finally:
         conn.close()
@@ -110,4 +106,3 @@ def save_items(items: list[dict[str, Any]], db_path: Optional[Path] = None) -> i
         raise
     finally:
         conn.close()
-

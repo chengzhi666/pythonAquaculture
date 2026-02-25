@@ -2,13 +2,13 @@ import logging
 import os
 import time
 
-logger = logging.getLogger(__name__)
-
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.edge.service import Service
 from selenium.webdriver.support import expected_conditions as EC  # noqa: N812
 from selenium.webdriver.support.ui import WebDriverWait
+
+logger = logging.getLogger(__name__)
 
 
 def create_driver():
