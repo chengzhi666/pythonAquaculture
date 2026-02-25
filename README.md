@@ -5,12 +5,12 @@
 
 ## 系统架构
 
-项目包含**两套独立的采集系统**：
+项目当前以 **MySQL 作为主存储**，并保留 SQLite 作为可选本地模式：
 
-### 系统一：Streamlit WebUI（SQLite）
+### 系统一：Streamlit WebUI（默认 MySQL）
 
 - **入口**：`app.py`
-- **数据库**：`intel.db`（SQLite）
+- **数据库**：默认 MySQL（可通过 `STORAGE_BACKEND=sqlite` 切换到本地 SQLite）
 - **用途**：快速展示、交互式采集、情报检索
 - **爬虫模块**：`crawlers/` 目录下的爬虫
 - **运行方式**：`streamlit run app.py`
@@ -23,14 +23,14 @@
 - **爬虫模块**：`fish_intel_mvp/jobs/` 目录下的爬虫
 - **运行方式**：`python fish_intel_mvp/run_one.py <job>`
 
-> **注意**：两个系统各自独立，数据存储不同步。如需统一数据，请手动进行 ETL。
+> **注意**：从当前版本开始，`app.py` / `runner.py` 默认也写入 MySQL。只有显式设置 `STORAGE_BACKEND=sqlite` 才使用本地 SQLite。
 
 ## 当前状态
 
 - `jd`：已可跑，入表 `product_snapshot`，含 `raw_event` 证据。
 - `moa`：已可跑，入表 `intel_item`，含 `raw_event` 证据。
 - `cnki`：已接入 `paper_meta`，可跑但依赖本机 Selenium/Edge 驱动环境。
-- `taobao`：占位（无 `TAOBAO_COOKIE` 时自动跳过）。
+- `taobao`：已实现（基于淘宝 H5 接口抓取，需有效 `TAOBAO_COOKIE`）。
 - `bjform`：占位。
 
 ## 目录结构
@@ -41,12 +41,12 @@ pythonAquaculture/
   runner.py                     # 配置驱动的采集框架
   config/
     sites.json                  # 采集源配置文件
-  crawlers/                     # 爬虫模块（SQLite系统）
+  crawlers/                     # 爬虫模块（供 Streamlit / runner 使用）
     cnki_crawler.py
     moa_fishery_crawler.py
     scholar_crawler.py
   storage/
-    db.py                       # SQLite 数据库操作
+    db.py                       # 统一存储层（默认 MySQL，兼容 SQLite）
   fish_intel_mvp/               # 批量处理系统（MySQL）
     common/
       db.py
@@ -68,7 +68,7 @@ pythonAquaculture/
 ## 环境准备
 
 1. **Python 3.9+**
-2. **MySQL**（仅用于系统二；系统一使用本地 SQLite）
+2. **MySQL**（主存储，系统一/二默认都使用）
 3. 在项目根目录执行：
 
 ```powershell
@@ -80,7 +80,7 @@ pip install -r fish_intel_mvp\requirements.txt
 
 ## 快速开始
 
-### 方案 A：Streamlit WebUI（推荐新手）
+### 方案 A：Streamlit WebUI（默认走 MySQL）
 
 ```powershell
 .\.venv\Scripts\activate
@@ -91,9 +91,9 @@ streamlit run app.py
 
 **特点**：
 
-- 无需配置 MySQL
-- 数据存储在本地 `intel.db`
+- 与批处理系统共用 MySQL 数据
 - 交互式操作，即时反馈
+- 可选切换到本地 SQLite（`STORAGE_BACKEND=sqlite`）
 
 ### 方案 B：批量处理系统（推荐生产环境）
 
@@ -131,8 +131,11 @@ SOURCE C:/Users/qiaoruo/PycharmProjects/pythonAquaculture/fish_intel_mvp/schema.
 ```powershell
 .\.venv\Scripts\activate
 python fish_intel_mvp\run_one.py jd
+python fish_intel_mvp\run_one.py taobao
 python fish_intel_mvp\run_one.py moa
 python fish_intel_mvp\run_one.py cnki
+# 仅刷新淘宝Cookie（会弹浏览器，手动登录后自动写回 fish_intel_mvp/.env）
+python fish_intel_mvp\jobs\refresh_taobao_cookie.py
 ```
 
 ### 常见配置项
@@ -143,6 +146,11 @@ python fish_intel_mvp\run_one.py cnki
 - `CNKI_MAX_PAGES` - 最多检索多少页（默认: 5）
 - `EDGE_DRIVER_PATH/CHROME_DRIVER_PATH` - 浏览器驱动路径（留空自动寻找）
 - `TAOBAO_COOKIE` - 淘宝的登录Cookie（可选）
+- `TAOBAO_KEYWORDS` - 淘宝抓取关键词（逗号分隔）
+- `TAOBAO_PAGES` - 每个关键词抓取页数
+- `TAOBAO_PAGE_SIZE` - 每页抓取条数（建议 <= 50）
+- `TAOBAO_AUTO_REFRESH_COOKIE` - cookie 缺失/失效时是否自动拉起浏览器刷新（默认: 1）
+- `TAOBAO_COOKIE_REFRESH_TIMEOUT_SECONDS` - 浏览器登录等待超时（默认: 180）
 
 ## 验收 SQL
 
@@ -209,6 +217,12 @@ LIMIT 20;
 5. CNKI 启动失败或超时
    通常是 Edge 与 EdgeDriver 版本不匹配，或本机 webdriver 环境问题。
    可在 `.env` 设置 `EDGE_DRIVER_PATH`。
+
+6. Taobao 提示 `FAIL_SYS_TOKEN_EXOIRED`
+   默认会自动触发 cookie 刷新；若不想自动弹浏览器，可设置 `TAOBAO_AUTO_REFRESH_COOKIE=0`，再手动运行 `python fish_intel_mvp\jobs\refresh_taobao_cookie.py`。
+
+7. Taobao 扫码页自动跳回账号密码
+   可设置 `TAOBAO_COOKIE_REFRESH_USE_SYSTEM_PROFILE=1`（默认）并将 `TAOBAO_COOKIE_REFRESH_START_URL` 设为 `https://login.taobao.com/member/login.jhtml`；必要时手动运行刷新脚本再扫码。
 
 ## 开发指南
 

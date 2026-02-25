@@ -1,0 +1,4 @@
+interface:
+  display_name: "Python 代码审查"
+  short_description: "按风险优先审查 Python 改动并指出测试缺口"
+  default_prompt: "请按中文输出风格审查当前 Python 改动：先给结论，再按严重级别列出问题（含文件位置、触发场景、最小修复建议），最后给建议补测。"

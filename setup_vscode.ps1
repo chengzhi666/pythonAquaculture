@@ -87,6 +87,28 @@ function Setup-VirtualEnvironment {
     return $true
 }
 
+# Configure Pip Mirror
+function Set-PipMirror {
+    Write-Host "Configuring pip to use Tsinghua University mirror..." -ForegroundColor Cyan
+
+    $pipConfigPath = Join-Path $env:APPDATA "pip\pip.ini"
+    $pipConfigDir = Split-Path $pipConfigPath -Parent
+
+    if (-not (Test-Path $pipConfigDir)) {
+        New-Item -ItemType Directory -Force -Path $pipConfigDir | Out-Null
+    }
+
+    $pipConfigContent = @"
+[global]
+index-url = https://pypi.tuna.tsinghua.edu.cn/simple
+[install]
+trusted-host = pypi.tuna.tsinghua.edu.cn
+"@
+
+    Set-Content -Path $pipConfigPath -Value $pipConfigContent
+    Write-Host "Pip mirror set to Tsinghua University!" -ForegroundColor Green
+}
+
 # Print configuration summary
 function Print-Summary {
     Write-Host ""
@@ -126,6 +148,7 @@ Write-Host ""
 
 if ($All) {
     Write-Host "Running complete setup..." -ForegroundColor Green
+    Set-PipMirror | Out-Null
     Install-Extensions | Out-Null
     Setup-VirtualEnvironment | Out-Null
 } elseif ($InstallExtensions -and -not $SetupVenv) {
@@ -139,6 +162,7 @@ if ($All) {
         "1" { Install-Extensions | Out-Null }
         "2" { Setup-VirtualEnvironment | Out-Null }
         "3" {
+            Set-PipMirror | Out-Null
             Install-Extensions | Out-Null
             Setup-VirtualEnvironment | Out-Null
         }

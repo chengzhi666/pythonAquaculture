@@ -1,13 +1,20 @@
+import logging
 import re
 import time
+
+logger = logging.getLogger(__name__)
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
 from requests import RequestException
 
+from crawlers.utils import DEFAULT_TIMEOUT, create_session
+
 BASE_URL = "https://yyj.moa.gov.cn"
 LIST_FIRST = "https://yyj.moa.gov.cn/tzgg/index.htm"
+
+# 模块级共享 session（带 UA + 自动重试）
+_session = create_session()
 
 
 def parse_tzgg_list(html: str, list_url: str):
@@ -20,7 +27,7 @@ def parse_tzgg_list(html: str, list_url: str):
     # 定位到这个块：<div class="sj_e_tonzhi_list"><ul id="div">...</ul></div>
     ul = soup.select_one("div.sj_e_tonzhi_list ul#div")
     if not ul:
-        print("没有找到列表 ul#div，检查一下选择器")
+        logger.warning("没有找到列表 ul#div，检查一下选择器")
         return []
 
     results = []
@@ -72,14 +79,14 @@ def fetch_tzgg_page(page_index: int = 0):
     else:
         list_url = f"https://yyj.moa.gov.cn/tzgg/index_{page_index}.htm"
 
-    print(f"正在抓取通知公告第 {page_index} 页...")
+    logger.info("正在抓取通知公告第 %d 页...", page_index)
 
     try:
-        resp = requests.get(list_url, timeout=10)
+        resp = _session.get(list_url, timeout=DEFAULT_TIMEOUT)
         # 如果状态码不是 2xx，会抛异常
         resp.raise_for_status()
     except RequestException as e:
-        print(f"列表页抓取失败，page={page_index}, url={list_url}, 错误：{e}")
+        logger.error("列表页抓取失败，page=%d, url=%s, 错误：%s", page_index, list_url, e)
         return []
 
     # 自动根据网页猜编码，防止中文乱码
@@ -98,7 +105,7 @@ def fetch_tzgg_detail(base: dict) -> dict:
     返回一个 dict
     """
     url = base["url"]
-    resp = requests.get(url, timeout=10)
+    resp = _session.get(url, timeout=DEFAULT_TIMEOUT)
     resp.encoding = resp.apparent_encoding
     html = resp.text
 
@@ -203,19 +210,19 @@ def crawl_moa_fishery_tzgg(max_pages: int = 1) -> list[dict]:
         # 列表页失败或为空的情况
         if not base_list:
             if page == 0:
-                print("第 0 页列表抓取失败，本次不继续抓取渔业渔政通知公告。")
+                logger.error("第 0 页列表抓取失败，本次不继续抓取渔业渔政通知公告。")
                 break
             else:
-                print(f"第 {page} 页列表为空，跳过该页。")
+                logger.warning("第 %d 页列表为空，跳过该页。", page)
                 continue
 
-        print(f"本页抓到 {len(base_list)} 条")
+        logger.info("本页抓到 %d 条", len(base_list))
 
         for base in base_list:
             try:
                 detail = fetch_tzgg_detail(base)
             except Exception as e:
-                print("抓详情失败，跳过：", base["url"], "错误：", e)
+                logger.warning("抓详情失败，跳过：%s 错误：%s", base["url"], e)
                 continue
 
             intel_item = {
@@ -237,7 +244,7 @@ def crawl_moa_fishery_tzgg(max_pages: int = 1) -> list[dict]:
             # 轻微 sleep，避免请求太频繁
             time.sleep(0.5)
 
-    print(f"本次渔业渔政通知公告成功采集 {len(all_items)} 条")
+    logger.info("本次渔业渔政通知公告成功采集 %d 条", len(all_items))
     return all_items
 
 

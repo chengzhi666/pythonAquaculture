@@ -52,3 +52,9 @@ build/
 dist/
 *.whl
 *.tar.gz
+
+# Claude local settings
+.claude/
+
+# Windows artifact
+nul

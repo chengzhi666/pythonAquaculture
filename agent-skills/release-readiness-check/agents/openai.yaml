@@ -1,0 +1,4 @@
+interface:
+  display_name: "发布就绪检查"
+  short_description: "给出可发布/不可发布结论并列出阻断项"
+  default_prompt: "请按中文输出风格执行发版检查：先给“可发布/带条件可发布/不可发布”结论，再列阻断项与证据、发布前动作和发布后观察项。"

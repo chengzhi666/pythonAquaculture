@@ -1,0 +1,4 @@
+interface:
+  display_name: "爬虫排障"
+  short_description: "定位爬虫故障根因并给出最小可验证修复"
+  default_prompt: "请按中文输出风格排查当前爬虫问题，按“现象-根因-证据-最小修复-回归防护”输出，并优先使用 PowerShell 常用命令。"

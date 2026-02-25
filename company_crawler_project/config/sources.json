@@ -1,0 +1,54 @@
+{
+  "project_name": "company_crawler_project",
+  "sources": [
+    {
+      "id": "cnki",
+      "name": "CNKI papers",
+      "enabled": true,
+      "module": "crawlers.cnki_crawler",
+      "function": "crawl_cnki",
+      "params": {
+        "theme": "aquaculture",
+        "papers_need": 20
+      },
+      "defaults": {
+        "source_type": "CNKI",
+        "region": "China"
+      }
+    },
+    {
+      "id": "moa_yyj_tzgg",
+      "name": "MOA fishery bulletin",
+      "enabled": true,
+      "module": "crawlers.moa_fishery_crawler",
+      "function": "crawl_moa_fishery_tzgg",
+      "params": {
+        "max_pages": 1
+      },
+      "defaults": {
+        "source_type": "MOA_FISHERY_TZGG",
+        "org": "MOA Fishery Bureau",
+        "region": "China"
+      }
+    },
+    {
+      "id": "scholar",
+      "name": "Semantic Scholar",
+      "enabled": true,
+      "module": "crawlers.scholar_crawler",
+      "function": "crawl_scholar",
+      "params": {
+        "query": "aquaculture recirculating aquaculture system",
+        "limit": 30,
+        "year_from": 2020,
+        "min_interval": 0.6
+      },
+      "defaults": {
+        "source_type": "SCHOLAR",
+        "org": "Semantic Scholar",
+        "region": "Global"
+      }
+    }
+  ]
+}
+

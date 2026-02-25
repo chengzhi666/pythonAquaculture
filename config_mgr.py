@@ -42,6 +42,9 @@ _load_project_dotenv()
 class Config:
     """项目配置类"""
 
+    # ===== 存储后端 =====
+    STORAGE_BACKEND: str = os.getenv("STORAGE_BACKEND", "mysql").strip().lower()
+
     # ===== 数据库配置 =====
     DB_HOST: str = os.getenv("DB_HOST", "localhost")
     DB_PORT: int = int(os.getenv("DB_PORT", "3306"))
@@ -94,7 +97,10 @@ class Config:
     @classmethod
     def validate(cls) -> None:
         """验证关键配置"""
-        if cls.DB_PASS == "change_me":
+        if cls.STORAGE_BACKEND not in {"mysql", "sqlite"}:
+            raise RuntimeError("STORAGE_BACKEND must be one of: mysql, sqlite")
+
+        if cls.STORAGE_BACKEND == "mysql" and cls.DB_PASS == "change_me":
             raise RuntimeError(
                 "DB_PASS is still 'change_me'. "
                 "Please update fish_intel_mvp/.env with your real MySQL password."

@@ -1,35 +1,93 @@
-from typing import cast
+from typing import Any, cast
 
-from storage.db import DB_PATH, get_conn  # 放在文件最上面
+import storage.db as storage_db  # 放在文件最上面
+from storage.db import DB_PATH
 
 QueryRow = tuple[str, str, str, str, str, str]
 
 
 def query_intel(keyword: str = "", order_by: str = "time") -> list[QueryRow]:
-    conn = get_conn()
-    cur = conn.cursor()
+    backend = storage_db.get_backend()
+    if backend == "mysql":
+        return _query_mysql(keyword=keyword, order_by=order_by)
+    return _query_sqlite(keyword=keyword, order_by=order_by)
 
-    sql = "SELECT pub_time, region, org, title, source_type, source_url FROM intel_item"
-    params: list[str] = []
 
-    if keyword:
-        sql += " WHERE title LIKE ? OR content LIKE ?"
-        kw = f"%{keyword}%"
-        params.extend([kw, kw])
+def _query_sqlite(keyword: str, order_by: str) -> list[QueryRow]:
+    conn = storage_db.get_conn()
+    try:
+        cur = conn.cursor()
 
-    if order_by == "time":
-        sql += " ORDER BY pub_time DESC"
-    elif order_by == "org_time":
-        sql += " ORDER BY org, pub_time DESC"
-    elif order_by == "region_time":
-        sql += " ORDER BY region, pub_time DESC"
-    else:
-        sql += " ORDER BY pub_time DESC"
+        sql = "SELECT pub_time, region, org, title, source_type, source_url FROM intel_item"
+        params: list[str] = []
 
-    cur.execute(sql, params)
-    rows = cast(list[QueryRow], cur.fetchall())
-    conn.close()
-    return rows
+        if keyword:
+            sql += " WHERE title LIKE ? OR content LIKE ?"
+            kw = f"%{keyword}%"
+            params.extend([kw, kw])
+
+        if order_by == "time":
+            sql += " ORDER BY pub_time_norm DESC, created_at DESC, pub_time DESC"
+        elif order_by == "org_time":
+            sql += " ORDER BY org, pub_time_norm DESC, created_at DESC, pub_time DESC"
+        elif order_by == "region_time":
+            sql += " ORDER BY region, pub_time_norm DESC, created_at DESC, pub_time DESC"
+        else:
+            sql += " ORDER BY pub_time_norm DESC, created_at DESC, pub_time DESC"
+
+        cur.execute(sql, params)
+        rows = cast(list[QueryRow], cur.fetchall())
+        return rows
+    finally:
+        conn.close()
+
+
+def _query_mysql(keyword: str, order_by: str) -> list[QueryRow]:
+    conn = storage_db.get_conn()
+    try:
+        cur = conn.cursor()
+
+        sql = "SELECT pub_time, region, org, title, source_type, source_url FROM intel_item"
+        params: list[str] = []
+
+        if keyword:
+            sql += " WHERE title LIKE %s OR content LIKE %s"
+            kw = f"%{keyword}%"
+            params.extend([kw, kw])
+
+        time_expr = (
+            "COALESCE("
+            "STR_TO_DATE(pub_time, '%Y-%m-%d %H:%i:%s'),"
+            "STR_TO_DATE(pub_time, '%Y-%m-%d'),"
+            "STR_TO_DATE(REPLACE(REPLACE(REPLACE(pub_time, '年', '-'), '月', '-'), '日', ''), '%Y-%m-%d')"
+            ")"
+        )
+
+        if order_by == "time":
+            sql += f" ORDER BY {time_expr} DESC, fetched_at DESC, pub_time DESC"
+        elif order_by == "org_time":
+            sql += f" ORDER BY org, {time_expr} DESC, fetched_at DESC, pub_time DESC"
+        elif order_by == "region_time":
+            sql += f" ORDER BY region, {time_expr} DESC, fetched_at DESC, pub_time DESC"
+        else:
+            sql += f" ORDER BY {time_expr} DESC, fetched_at DESC, pub_time DESC"
+
+        cur.execute(sql, params)
+        rows_raw = cast(list[dict[str, Any]], cur.fetchall())
+
+        return [
+            (
+                str(row.get("pub_time") or ""),
+                str(row.get("region") or ""),
+                str(row.get("org") or ""),
+                str(row.get("title") or ""),
+                str(row.get("source_type") or ""),
+                str(row.get("source_url") or ""),
+            )
+            for row in rows_raw
+        ]
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":
@@ -53,4 +111,7 @@ if __name__ == "__main__":
         print(f"     {url}")
         print("-" * 80)
 
-    print("当前数据库文件：", DB_PATH)
+    if storage_db.get_backend() == "mysql":
+        print("当前存储后端：MySQL")
+    else:
+        print("当前数据库文件：", DB_PATH)

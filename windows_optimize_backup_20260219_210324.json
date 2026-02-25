@@ -1,0 +1,47 @@
+﻿{
+    "CreatedAt":  "2026-02-19T21:03:24",
+    "Computer":  "QRR9000P",
+    "Original":  {
+                     "PowerSchemeGuid":  "85d583c5-cf2e-4197-80fd-3789a227a72c",
+                     "RegistryTweaks":  [
+                                            {
+                                                "Path":  "HKCU:\\System\\GameConfigStore",
+                                                "Name":  "GameDVR_Enabled",
+                                                "Exists":  true,
+                                                "Type":  "DWord",
+                                                "Value":  0
+                                            },
+                                            {
+                                                "Path":  "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR",
+                                                "Name":  "AppCaptureEnabled",
+                                                "Exists":  true,
+                                                "Type":  "DWord",
+                                                "Value":  0
+                                            },
+                                            {
+                                                "Path":  "HKCU:\\Software\\Microsoft\\GameBar",
+                                                "Name":  "UseNexusForGameBarEnabled",
+                                                "Exists":  true,
+                                                "Type":  "DWord",
+                                                "Value":  0
+                                            }
+                                        ],
+                     "StartupEntries":  [
+                                            {
+                                                "Path":  "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                                                "Name":  "OneDrive",
+                                                "Value":  "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background"
+                                            },
+                                            {
+                                                "Path":  "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                                                "Name":  "aTrustTray",
+                                                "Value":  "C:\\Program Files (x86)\\Sangfor\\aTrust\\aTrustTray\\aTrustTray.exe -- -s autostart"
+                                            },
+                                            {
+                                                "Path":  "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                                                "Name":  "sysdiag",
+                                                "Value":  "\"D:\\Program Files\\Huorong\\Sysdiag\\bin\\hipstray.exe\""
+                                            }
+                                        ]
+                 }
+}

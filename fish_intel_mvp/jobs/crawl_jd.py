@@ -5,7 +5,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Callable, Optional, Union
 from urllib.parse import quote_plus
 
 from bs4 import BeautifulSoup
@@ -439,8 +439,13 @@ def _go_next_page(dp: ChromiumPage) -> bool:
     return False
 
 
-def run(conn, keywords: Optional[list[str]] = None, pages: Optional[int] = None) -> int:
-    source_name = "jd"
+def run(
+    conn,
+    keywords: Optional[list[str]] = None,
+    pages: Optional[int] = None,
+    enrich_item_fn: Optional[Callable[[dict[str, Any]], dict[str, Any]]] = None,
+    source_name: str = "jd",
+) -> int:
     keywords = keywords or [
         k.strip() for k in os.getenv("JD_KEYWORDS", "大黄鱼").split(",") if k.strip()
     ]
@@ -532,16 +537,50 @@ def run(conn, keywords: Optional[list[str]] = None, pages: Optional[int] = None)
                             max_run_seconds,
                         )
                         return inserted
+
+                    enriched: dict[str, Any] = {}
+                    if enrich_item_fn is not None:
+                        try:
+                            enriched = enrich_item_fn(
+                                {
+                                    "platform": "jd",
+                                    "keyword": keyword,
+                                    "title": item["title"],
+                                    "price": item["price"],
+                                    "original_price": item["original_price"],
+                                    "sales_or_commit": item["sales_or_commit"],
+                                    "shop": item["shop"],
+                                    "province": item["province"],
+                                    "city": item["city"],
+                                    "detail_url": item["detail_url"],
+                                    "category": item["category"],
+                                }
+                            ) or {}
+                        except Exception as exc:  # noqa: BLE001
+                            LOGGER.warning(
+                                "jd enrich failed: keyword=%s page=%s idx=%s err=%s",
+                                keyword,
+                                page_no,
+                                idx,
+                                exc,
+                            )
                     raw_id = insert_raw_event(
                         conn,
                         source_name=source_name,
                         url=item["detail_url"],
                         title=item["title"],
-                        raw_json=json.dumps(item["raw"], ensure_ascii=False),
+                        raw_json=json.dumps(
+                            {
+                                "raw_item": item["raw"],
+                                "extract": enriched,
+                            },
+                            ensure_ascii=False,
+                        ),
                     )
                     upsert_product_snapshot(
                         conn,
                         {
+                            **enriched,
                             "platform": "jd",
                             "keyword": keyword,
                             "title": item["title"],

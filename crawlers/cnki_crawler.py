@@ -1,5 +1,8 @@
+import logging
 import os
 import time
+
+logger = logging.getLogger(__name__)
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -63,7 +66,7 @@ def open_page(driver, theme: str):
     wait.until(
         EC.presence_of_element_located((By.CSS_SELECTOR, "table.result-table-list tbody tr"))
     )
-    print("检索结果页加载完成")
+    logger.info("检索结果页加载完成")
 
 
 def crawl(driver, papers_need: int, theme: str) -> list[dict]:
@@ -204,10 +207,12 @@ def crawl(driver, papers_need: int, theme: str) -> list[dict]:
 
                     # 加入结果列表
                     results.append(item)
-                    print(f"[OK] 第{count}条：{title} ({date} | {institute or source})")
+                    logger.info(
+                        "[OK] 第%d条：%s (%s | %s)", count, title, date, institute or source
+                    )
 
                 except Exception as e_detail:
-                    print(f"[WARN] 第{count}条详情页爬取失败: {e_detail}")
+                    logger.warning("第%d条详情页爬取失败: %s", count, e_detail)
 
                 finally:
                     # 关掉详情页，回到列表
@@ -227,7 +232,7 @@ def crawl(driver, papers_need: int, theme: str) -> list[dict]:
                     count += 1  # 不论成功失败，计数+1，避免死循环
 
             except Exception as e_row:
-                print(f"[WARN] 第{count}条列表行爬取失败: {e_row}")
+                logger.warning("第%d条列表行爬取失败: %s", count, e_row)
                 count += 1
                 continue
 
@@ -238,7 +243,7 @@ def crawl(driver, papers_need: int, theme: str) -> list[dict]:
                 driver.execute_script("arguments[0].click();", next_btn)
                 time.sleep(2)
             except Exception as e_next:
-                print(f"[INFO] 翻页失败或没有下一页了：{e_next}")
+                logger.info("翻页失败或没有下一页了：%s", e_next)
                 break
 
     return results

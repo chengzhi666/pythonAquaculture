@@ -1,10 +1,16 @@
 import hashlib
+import logging
 import time
 from typing import Any, Optional, Union
 
-import requests
+from crawlers.utils import DEFAULT_TIMEOUT, create_session
+
+logger = logging.getLogger(__name__)
 
 API_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
+
+# 模块级共享 session（带 UA + 自动重试）
+_session = create_session()
 
 
 def _fallback_url(query: str, title: str) -> str:
@@ -32,7 +38,7 @@ def crawl_scholar(
         "fields": "title,abstract,year,authors,url,venue,citationCount,publicationDate,externalIds",
     }
 
-    r = requests.get(API_URL, params=params, timeout=15)
+    r = _session.get(API_URL, params=params, timeout=DEFAULT_TIMEOUT)
     r.raise_for_status()
     data = r.json()
 
