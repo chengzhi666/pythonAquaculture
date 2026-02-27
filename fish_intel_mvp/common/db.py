@@ -130,85 +130,146 @@ def upsert_product_snapshot(conn, item):
         "snapshot_time": item["snapshot_time"],
         "raw_id": item.get("raw_id"),
     }
+    insert_cols = [
+        "platform",
+        "keyword",
+        "title",
+        "price",
+        "original_price",
+        "price_unit",
+        "currency",
+        "price_per_kg",
+        "price_change_7d",
+        "price_change_30d",
+        "sales_or_commit",
+        "shop",
+        "shop_type",
+        "brand",
+        "sku",
+        "province",
+        "city",
+        "detail_url",
+        "category",
+        "product_type",
+        "product_type_confidence",
+        "product_type_rule_id",
+        "spec_raw",
+        "spec_weight_value",
+        "spec_weight_unit",
+        "spec_weight_grams",
+        "spec_pack_count",
+        "spec_unit",
+        "spec_total_weight_grams",
+        "spec_weight_normalized",
+        "origin_raw",
+        "origin_country",
+        "origin_province",
+        "origin_city",
+        "origin_standardized",
+        "origin_rule_id",
+        "storage_method",
+        "is_wild",
+        "is_fresh",
+        "nutrition_protein_g_per_100g",
+        "nutrition_fat_g_per_100g",
+        "nutrition_omega3_g_per_100g",
+        "cert_organic",
+        "cert_green_food",
+        "cert_asc",
+        "cert_msc",
+        "cert_bap",
+        "cert_haccp",
+        "cert_halal",
+        "cert_qs",
+        "extra_json",
+        "snapshot_time",
+        "raw_id",
+    ]
+    update_cols = [
+        "keyword",
+        "title",
+        "price",
+        "original_price",
+        "price_unit",
+        "currency",
+        "price_per_kg",
+        "price_change_7d",
+        "price_change_30d",
+        "sales_or_commit",
+        "shop",
+        "shop_type",
+        "brand",
+        "sku",
+        "province",
+        "city",
+        "detail_url",
+        "category",
+        "product_type_confidence",
+        "product_type_rule_id",
+        "spec_raw",
+        "spec_weight_value",
+        "spec_weight_unit",
+        "spec_weight_grams",
+        "spec_pack_count",
+        "spec_unit",
+        "spec_total_weight_grams",
+        "origin_raw",
+        "origin_country",
+        "origin_province",
+        "origin_city",
+        "origin_standardized",
+        "origin_rule_id",
+        "storage_method",
+        "is_wild",
+        "is_fresh",
+        "nutrition_protein_g_per_100g",
+        "nutrition_fat_g_per_100g",
+        "nutrition_omega3_g_per_100g",
+        "cert_organic",
+        "cert_green_food",
+        "cert_asc",
+        "cert_msc",
+        "cert_bap",
+        "cert_haccp",
+        "cert_halal",
+        "cert_qs",
+        "extra_json",
+        "raw_id",
+    ]
 
-    sql = """
+    with conn.cursor() as cur:
+        cur.execute("SHOW COLUMNS FROM product_snapshot")
+        existing_cols = {row["Field"] for row in cur.fetchall()}
+
+    filtered_insert_cols = [c for c in insert_cols if c in existing_cols]
+    filtered_update_cols = [c for c in update_cols if c in existing_cols]
+
+    required_cols = {"platform", "keyword", "title", "detail_url", "snapshot_time"}
+    if not required_cols.issubset(existing_cols):
+        missing = ", ".join(sorted(required_cols - existing_cols))
+        raise RuntimeError(
+            f"product_snapshot table is missing required columns: {missing}. "
+            "Please run fish_intel_mvp/schema.sql to upgrade schema."
+        )
+
+    if not filtered_insert_cols:
+        raise RuntimeError("product_snapshot has no compatible columns for upsert.")
+
+    insert_clause = ", ".join(filtered_insert_cols)
+    values_clause = ", ".join(f"%({c})s" for c in filtered_insert_cols)
+    if filtered_update_cols:
+        update_clause = ",\n      ".join(f"{c}=VALUES({c})" for c in filtered_update_cols)
+    else:
+        update_clause = "platform=platform"
+
+    sql = f"""
     INSERT INTO product_snapshot(
-      platform, keyword, title, price, original_price, price_unit, currency,
-      price_per_kg, price_change_7d, price_change_30d, sales_or_commit,
-      shop, shop_type, brand, sku, province, city, detail_url, category,
-      product_type, product_type_confidence, product_type_rule_id, spec_raw,
-      spec_weight_value, spec_weight_unit, spec_weight_grams, spec_pack_count,
-      spec_unit, spec_total_weight_grams, spec_weight_normalized, origin_raw,
-      origin_country, origin_province, origin_city, origin_standardized, origin_rule_id,
-      storage_method, is_wild, is_fresh, nutrition_protein_g_per_100g,
-      nutrition_fat_g_per_100g, nutrition_omega3_g_per_100g, cert_organic,
-      cert_green_food, cert_asc, cert_msc, cert_bap, cert_haccp, cert_halal,
-      cert_qs, extra_json, snapshot_time, raw_id
+      {insert_clause}
     ) VALUES (
-      %(platform)s, %(keyword)s, %(title)s, %(price)s, %(original_price)s,
-      %(price_unit)s, %(currency)s, %(price_per_kg)s, %(price_change_7d)s,
-      %(price_change_30d)s, %(sales_or_commit)s, %(shop)s, %(shop_type)s,
-      %(brand)s, %(sku)s, %(province)s, %(city)s, %(detail_url)s, %(category)s,
-      %(product_type)s, %(product_type_confidence)s, %(product_type_rule_id)s,
-      %(spec_raw)s, %(spec_weight_value)s, %(spec_weight_unit)s, %(spec_weight_grams)s,
-      %(spec_pack_count)s, %(spec_unit)s, %(spec_total_weight_grams)s,
-      %(spec_weight_normalized)s, %(origin_raw)s, %(origin_country)s,
-      %(origin_province)s, %(origin_city)s, %(origin_standardized)s, %(origin_rule_id)s,
-      %(storage_method)s, %(is_wild)s, %(is_fresh)s, %(nutrition_protein_g_per_100g)s,
-      %(nutrition_fat_g_per_100g)s, %(nutrition_omega3_g_per_100g)s, %(cert_organic)s,
-      %(cert_green_food)s, %(cert_asc)s, %(cert_msc)s, %(cert_bap)s, %(cert_haccp)s,
-      %(cert_halal)s, %(cert_qs)s, %(extra_json)s, %(snapshot_time)s, %(raw_id)s
+      {values_clause}
     )
     ON DUPLICATE KEY UPDATE
-      keyword=VALUES(keyword),
-      title=VALUES(title),
-      price=VALUES(price),
-      original_price=VALUES(original_price),
-      price_unit=VALUES(price_unit),
-      currency=VALUES(currency),
-      price_per_kg=VALUES(price_per_kg),
-      price_change_7d=VALUES(price_change_7d),
-      price_change_30d=VALUES(price_change_30d),
-      sales_or_commit=VALUES(sales_or_commit),
-      shop=VALUES(shop),
-      shop_type=VALUES(shop_type),
-      brand=VALUES(brand),
-      sku=VALUES(sku),
-      province=VALUES(province),
-      city=VALUES(city),
-      detail_url=VALUES(detail_url),
-      category=VALUES(category),
-      product_type_confidence=VALUES(product_type_confidence),
-      product_type_rule_id=VALUES(product_type_rule_id),
-      spec_raw=VALUES(spec_raw),
-      spec_weight_value=VALUES(spec_weight_value),
-      spec_weight_unit=VALUES(spec_weight_unit),
-      spec_weight_grams=VALUES(spec_weight_grams),
-      spec_pack_count=VALUES(spec_pack_count),
-      spec_unit=VALUES(spec_unit),
-      spec_total_weight_grams=VALUES(spec_total_weight_grams),
-      origin_raw=VALUES(origin_raw),
-      origin_country=VALUES(origin_country),
-      origin_province=VALUES(origin_province),
-      origin_city=VALUES(origin_city),
-      origin_standardized=VALUES(origin_standardized),
-      origin_rule_id=VALUES(origin_rule_id),
-      storage_method=VALUES(storage_method),
-      is_wild=VALUES(is_wild),
-      is_fresh=VALUES(is_fresh),
-      nutrition_protein_g_per_100g=VALUES(nutrition_protein_g_per_100g),
-      nutrition_fat_g_per_100g=VALUES(nutrition_fat_g_per_100g),
-      nutrition_omega3_g_per_100g=VALUES(nutrition_omega3_g_per_100g),
-      cert_organic=VALUES(cert_organic),
-      cert_green_food=VALUES(cert_green_food),
-      cert_asc=VALUES(cert_asc),
-      cert_msc=VALUES(cert_msc),
-      cert_bap=VALUES(cert_bap),
-      cert_haccp=VALUES(cert_haccp),
-      cert_halal=VALUES(cert_halal),
-      cert_qs=VALUES(cert_qs),
-      extra_json=VALUES(extra_json),
-      raw_id=VALUES(raw_id)
+      {update_clause}
     """
     with conn.cursor() as cur:
         cur.execute(sql, payload)

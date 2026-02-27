@@ -380,11 +380,7 @@ def _extract_items_from_html(dp: ChromiumPage) -> list[dict]:
     return items
 
 
-def _save_debug_html(dp: ChromiumPage, keyword: str):
-    try:
-        html = dp.html or ""
-    except Exception:
-        html = ""
+def _save_debug_html_content(html: str):
     if not html:
         return
     path = Path("fish_intel_mvp/jd_debug.html")
@@ -397,6 +393,14 @@ def _save_debug_html(dp: ChromiumPage, keyword: str):
     }
     LOGGER.info("jd debug html saved: %s", path.resolve())
     LOGGER.info("jd dom stats: %s", stats)
+
+
+def _save_debug_html(dp: ChromiumPage, keyword: str):
+    try:
+        html = dp.html or ""
+    except Exception:
+        html = ""
+    _save_debug_html_content(html)
 
 
 def _wait_page_ready(dp: ChromiumPage, seconds: int = 30):
@@ -439,6 +443,316 @@ def _go_next_page(dp: ChromiumPage) -> bool:
     return False
 
 
+class _HtmlSnapshot:
+    def __init__(self, html: str, url: str):
+        self.html = html
+        self.url = url
+
+
+def _extract_items_from_html_content(html: str, url: str) -> list[dict]:
+    return _extract_items_from_html(_HtmlSnapshot(html=html, url=url))
+
+
+def _go_next_page_playwright(page) -> bool:
+    selectors = ["a.pn-next", ".pn-next", ".fp-next"]
+    for selector in selectors:
+        try:
+            ele = page.locator(selector).first
+            if ele.count() == 0:
+                continue
+            cls = (ele.get_attribute("class") or "").lower()
+            if "disabled" in cls:
+                return False
+            ele.click(timeout=3000)
+            page.wait_for_timeout(2000)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def _playwright_goto(page, url: str, timeout_ms: int = 60000, retries: int = 3) -> None:
+    for i in range(1, retries + 1):
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            return
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc)
+            if "interrupted by another navigation" in msg:
+                LOGGER.warning(
+                    "jd playwright goto interrupted: attempt=%s/%s target=%s current=%s",
+                    i,
+                    retries,
+                    url,
+                    page.url,
+                )
+                page.wait_for_timeout(1200)
+                if "jd.com" in (page.url or ""):
+                    return
+            if i >= retries:
+                raise
+            page.wait_for_timeout(1200)
+
+
+def _wait_not_aq_route(page, seconds: int = 20) -> None:
+    end = time.time() + max(1, seconds)
+    while time.time() < end:
+        url = page.url or ""
+        if "aq.jd.com/route/page" not in url:
+            return
+        page.wait_for_timeout(500)
+
+
+def _is_true(value: Optional[str]) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _resolve_chrome_path() -> str:
+    env_path = os.getenv("JD_CHROME_PATH", "").strip()
+    if env_path:
+        return env_path
+
+    candidates = [
+        str((Path(__file__).resolve().parents[2] / ".chrome-for-testing" / "chrome-win64" / "chrome.exe")),
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return ""
+
+
+def _build_jd_browser(headless: bool) -> ChromiumPage:
+    options = ChromiumOptions()
+    # Use an isolated profile/port for each run to avoid singleton/profile locks.
+    options.auto_port(True)
+    options.use_system_user_path(False)
+
+    chrome_path = _resolve_chrome_path()
+    if chrome_path and os.path.exists(chrome_path):
+        options.set_browser_path(chrome_path)
+
+    user_data_path = os.getenv("JD_USER_DATA_PATH", "").strip()
+    if user_data_path:
+        options.set_user_data_path(user_data_path)
+    LOGGER.info(
+        "jd browser launch opts: headless=%s chrome_path=%s user_data=%s",
+        headless,
+        chrome_path or "<default>",
+        user_data_path or "<auto>",
+    )
+
+    options.set_argument("--no-proxy-server")
+    options.set_argument("--disable-gpu")
+    options.set_argument("--no-first-run")
+    options.set_argument("--no-default-browser-check")
+    options.set_user_agent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
+    if headless:
+        options.headless(True)
+
+    return ChromiumPage(options)
+
+
+def _run_with_playwright(
+    conn,
+    *,
+    keywords: list[str],
+    page_count: int,
+    login_wait_seconds: int,
+    max_items_per_page: int,
+    max_run_seconds: int,
+    run_started_at: float,
+    snapshot_time: datetime,
+    enrich_item_fn: Optional[Callable[[dict[str, Any]], dict[str, Any]]],
+    source_name: str,
+) -> int:
+    try:
+        from playwright.sync_api import sync_playwright
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("playwright is not installed. run: pip install playwright") from exc
+
+    inserted = 0
+    jd_headless = _is_true(os.getenv("JD_HEADLESS", "0"))
+    chrome_path = _resolve_chrome_path()
+    launch_args = [
+        "--no-proxy-server",
+        "--disable-gpu",
+        "--no-first-run",
+        "--no-default-browser-check",
+    ]
+
+    launch_kwargs: dict[str, Any] = {
+        "headless": jd_headless,
+        "args": launch_args,
+    }
+    if chrome_path and os.path.exists(chrome_path):
+        launch_kwargs["executable_path"] = chrome_path
+    LOGGER.info(
+        "jd playwright launch opts: headless=%s chrome_path=%s",
+        jd_headless,
+        chrome_path or "<default>",
+    )
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(**launch_kwargs)
+        context = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+        )
+        page = context.new_page()
+        try:
+            for keyword in keywords:
+                search_url = f"https://search.jd.com/Search?keyword={quote_plus(keyword)}&enc=utf-8"
+                LOGGER.info("start jd crawl (playwright): keyword=%s pages=%s", keyword, page_count)
+                _playwright_goto(page, search_url, timeout_ms=60000, retries=3)
+                _wait_not_aq_route(page, seconds=15)
+                page.wait_for_timeout(2000)
+
+                if "passport.jd.com" in (page.url or ""):
+                    LOGGER.info(
+                        "jd login page detected, please scan QR within %ss",
+                        login_wait_seconds,
+                    )
+                    end = time.time() + login_wait_seconds
+                    while time.time() < end:
+                        if "passport.jd.com" not in (page.url or ""):
+                            break
+                        time.sleep(1)
+                    _playwright_goto(page, search_url, timeout_ms=60000, retries=3)
+                    _wait_not_aq_route(page, seconds=20)
+                    page.wait_for_timeout(2000)
+
+                for page_no in range(1, page_count + 1):
+                    if time.time() - run_started_at > max_run_seconds:
+                        LOGGER.warning("jd max runtime reached (%ss), force stop", max_run_seconds)
+                        return inserted
+
+                    try:
+                        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    except Exception:
+                        pass
+                    page.wait_for_timeout(1500)
+
+                    html = page.content()
+                    page_items = _extract_items_from_html_content(html, page.url or "")
+                    if not page_items:
+                        _save_debug_html_content(html)
+                    if len(page_items) > max_items_per_page:
+                        LOGGER.info(
+                            "jd trim items per page: %s -> %s",
+                            len(page_items),
+                            max_items_per_page,
+                        )
+                        page_items = page_items[:max_items_per_page]
+
+                    try:
+                        title = _clean_text(page.title())
+                    except Exception:
+                        title = ""
+                    LOGGER.info(
+                        "jd page parsed: keyword=%s page=%s items=%s url=%s title=%s",
+                        keyword,
+                        page_no,
+                        len(page_items),
+                        page.url,
+                        title,
+                    )
+
+                    for idx, item in enumerate(page_items, start=1):
+                        if time.time() - run_started_at > max_run_seconds:
+                            LOGGER.warning(
+                                "jd max runtime reached during db writes (%ss), force stop",
+                                max_run_seconds,
+                            )
+                            return inserted
+
+                        enriched: dict[str, Any] = {}
+                        if enrich_item_fn is not None:
+                            try:
+                                enriched = (
+                                    enrich_item_fn(
+                                        {
+                                            "platform": "jd",
+                                            "keyword": keyword,
+                                            "title": item["title"],
+                                            "price": item["price"],
+                                            "original_price": item["original_price"],
+                                            "sales_or_commit": item["sales_or_commit"],
+                                            "shop": item["shop"],
+                                            "province": item["province"],
+                                            "city": item["city"],
+                                            "detail_url": item["detail_url"],
+                                            "category": item["category"],
+                                        }
+                                    )
+                                    or {}
+                                )
+                            except Exception as exc:  # noqa: BLE001
+                                LOGGER.warning(
+                                    "jd enrich failed: keyword=%s page=%s idx=%s err=%s",
+                                    keyword,
+                                    page_no,
+                                    idx,
+                                    exc,
+                                )
+                        raw_id = insert_raw_event(
+                            conn,
+                            source_name=source_name,
+                            url=item["detail_url"],
+                            title=item["title"],
+                            raw_json=json.dumps(
+                                {
+                                    "raw_item": item["raw"],
+                                    "extract": enriched,
+                                },
+                                ensure_ascii=False,
+                            ),
+                        )
+                        upsert_product_snapshot(
+                            conn,
+                            {
+                                **enriched,
+                                "platform": "jd",
+                                "keyword": keyword,
+                                "title": item["title"],
+                                "price": item["price"],
+                                "original_price": item["original_price"],
+                                "sales_or_commit": item["sales_or_commit"],
+                                "shop": item["shop"],
+                                "province": item["province"],
+                                "city": item["city"],
+                                "detail_url": item["detail_url"],
+                                "category": item["category"],
+                                "snapshot_time": snapshot_time,
+                                "raw_id": raw_id,
+                            },
+                        )
+                        inserted += 1
+                        if idx % 10 == 0 or idx == len(page_items):
+                            LOGGER.info(
+                                "jd db progress: page=%s %s/%s inserted_total=%s",
+                                page_no,
+                                idx,
+                                len(page_items),
+                                inserted,
+                            )
+
+                    if page_no < page_count:
+                        if not _go_next_page_playwright(page):
+                            LOGGER.info("jd no next page, stop early on page=%s", page_no)
+                            break
+        finally:
+            context.close()
+            browser.close()
+
+    return inserted
+
+
 def run(
     conn,
     keywords: Optional[list[str]] = None,
@@ -465,17 +779,31 @@ def run(
     run_started_at = time.time()
 
     snapshot_time = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    browser_backend = os.getenv("JD_BROWSER_BACKEND", "drission").strip().lower()
+    if browser_backend == "playwright":
+        return _run_with_playwright(
+            conn,
+            keywords=keywords,
+            page_count=page_count,
+            login_wait_seconds=login_wait_seconds,
+            max_items_per_page=max_items_per_page,
+            max_run_seconds=max_run_seconds,
+            run_started_at=run_started_at,
+            snapshot_time=snapshot_time,
+            enrich_item_fn=enrich_item_fn,
+            source_name=source_name,
+        )
+
     inserted = 0
 
-    options = ChromiumOptions()
-    options.set_argument("--no-proxy-server")
-    options.set_argument("--disable-gpu")
-    options.set_user_agent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    )
-
-    dp = ChromiumPage(options)
+    jd_headless = _is_true(os.getenv("JD_HEADLESS", "0"))
+    try:
+        dp = _build_jd_browser(headless=jd_headless)
+    except Exception as exc:
+        if jd_headless:
+            raise
+        LOGGER.warning("jd browser start failed, retry with headless mode: %s", exc)
+        dp = _build_jd_browser(headless=True)
     try:
         for keyword in keywords:
             search_url = f"https://search.jd.com/Search?keyword={quote_plus(keyword)}&enc=utf-8"
