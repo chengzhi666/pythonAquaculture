@@ -37,6 +37,9 @@ fish_intel_mvp/.env
 jd_debug.html
 fish_intel_mvp/jd_debug.html
 fish_intel_mvp/logs/
+chrome_data/
+.chrome-for-testing/
+fish_intel_mvp/jobs/.drivers/
 
 # Testing
 .pytest_cache/

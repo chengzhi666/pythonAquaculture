@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>水产养殖情报采集与分析系统</title>
+<style>
+/* ── 全局 ─────────────────────────────────────────────── */
+:root {
+  --primary: #1677ff;
+  --primary-hover: #4096ff;
+  --success: #52c41a;
+  --error: #ff4d4f;
+  --warning: #faad14;
+  --bg: #f5f7fa;
+  --card: #ffffff;
+  --border: #e8e8e8;
+  --text: #333;
+  --text-secondary: #888;
+  --radius: 8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── 头部 ─────────────────────────────────────────────── */
+.header {
+  background: linear-gradient(135deg, #1677ff 0%, #0958d9 100%);
+  color: #fff; padding: 20px 32px; display: flex;
+  align-items: center; justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+.header h1 { font-size: 22px; font-weight: 600; }
+.header .stats-bar { display: flex; gap: 18px; font-size: 13px; opacity: .9; }
+.header .stats-bar span { background: rgba(255,255,255,.18); padding: 4px 12px; border-radius: 12px; }
+
+/* ── Tab 页签 ─────────────────────────────────────────── */
+.tabs { display: flex; border-bottom: 2px solid var(--border); background: var(--card); padding: 0 32px; }
+.tab-btn {
+  padding: 14px 28px; cursor: pointer; border: none; background: none;
+  font-size: 15px; color: var(--text-secondary); position: relative; transition: .2s;
+}
+.tab-btn.active { color: var(--primary); font-weight: 600; }
+.tab-btn.active::after {
+  content: ''; position: absolute; bottom: -2px; left: 0; right: 0;
+  height: 2px; background: var(--primary);
+}
+
+/* ── 通用容器 ─────────────────────────────────────────── */
+.container { max-width: 1300px; margin: 0 auto; padding: 24px 32px; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ── 卡片 ─────────────────────────────────────────────── */
+.card {
+  background: var(--card); border-radius: var(--radius);
+  box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 24px; margin-bottom: 20px;
+}
+.card h3 { font-size: 16px; margin-bottom: 16px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+
+/* ── 表单 ─────────────────────────────────────────────── */
+.form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group label { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+.form-group input, .form-group select {
+  padding: 8px 14px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 14px; outline: none; transition: .2s; min-width: 180px;
+}
+.form-group input:focus, .form-group select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(22,119,255,.15); }
+
+.btn {
+  padding: 9px 24px; border: none; border-radius: 6px; cursor: pointer;
+  font-size: 14px; font-weight: 500; transition: .2s; white-space: nowrap;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+.btn-outline { background: #fff; border: 1px solid var(--border); color: var(--text); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ── 提示条 ───────────────────────────────────────────── */
+.tips { background: #fffbe6; border: 1px solid #ffe58f; border-radius: 6px; padding: 10px 16px; font-size: 13px; color: #ad6800; margin-bottom: 16px; line-height: 1.7; }
+.tips b { color: #d46b08; }
+
+/* ── 状态标签 ─────────────────────────────────────────── */
+.status-badge {
+  display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 500;
+}
+.status-pending  { background: #f0f0f0; color: #888; }
+.status-running  { background: #e6f4ff; color: #1677ff; }
+.status-done     { background: #f6ffed; color: #52c41a; }
+.status-error    { background: #fff2f0; color: #ff4d4f; }
+
+/* ── 任务列表 ─────────────────────────────────────────── */
+.task-list { max-height: 260px; overflow-y: auto; }
+.task-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px;
+}
+.task-item:last-child { border-bottom: none; }
+.task-meta { display: flex; gap: 14px; align-items: center; }
+
+/* ── 数据表格 ─────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: #fafafa; padding: 10px 12px; text-align: left; font-weight: 600; border-bottom: 2px solid var(--border); position: sticky; top: 0; z-index: 1; }
+td { padding: 9px 12px; border-bottom: 1px solid #f5f5f5; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+tr:hover td { background: #fafafa; }
+td a { color: var(--primary); text-decoration: none; }
+td a:hover { text-decoration: underline; }
+.no-data { text-align: center; padding: 40px; color: var(--text-secondary); }
+
+/* ── 结果统计条 ───────────────────────────────────────── */
+.result-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.result-bar .count { font-size: 14px; color: var(--text-secondary); }
+
+/* ── 加载动画 ─────────────────────────────────────────── */
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--primary); border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 响应式 ───────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .form-row { flex-direction: column; }
+  .container { padding: 16px; }
+  .header { flex-direction: column; gap: 10px; padding: 16px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ 头部 ═══════════════════ -->
+<div class="header">
+  <h1>🐟 水产养殖情报采集与分析系统</h1>
+  <div class="stats-bar" id="statsBar">加载中...</div>
+</div>
+
+<!-- ═══════════════════ Tab 页签 ═══════════════════ -->
+<div class="tabs">
+  <button class="tab-btn active" data-tab="collect">📥 数据采集</button>
+  <button class="tab-btn" data-tab="papers">📄 论文数据</button>
+  <button class="tab-btn" data-tab="products">🛒 商品数据</button>
+  <button class="tab-btn" data-tab="intel">📋 渔业政策</button>
+</div>
+
+<div class="container">
+
+<!-- ═══════════════════ 采集页 ═══════════════════ -->
+<div class="tab-content active" id="tab-collect">
+  <div class="card">
+    <h3>⚙️ 启动采集任务</h3>
+    <div class="tips">
+      <b>使用提示：</b><br>
+      ● <b>知网(CNKI)</b>：浏览器会弹出，需手动完成滑块验证后自动继续采集<br>
+      ● <b>京东(JD)</b>：浏览器会弹出，需手机扫码登录后自动继续采集<br>
+      ● <b>淘宝(Taobao)</b>：需提前运行 <code>refresh_taobao_cookie.py</code> 获取 Cookie<br>
+      ● <b>农业农村部(MOA)</b>：无需额外操作，直接采集
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>爬虫选择</label>
+        <select id="crawlerSelect">
+          <option value="cnki">📄 知网论文 (CNKI)</option>
+          <option value="jd">🛒 京东商品 (JD)</option>
+          <option value="taobao">🛍️ 淘宝商品 (Taobao)</option>
+          <option value="moa">📋 农业农村部渔业政策 (MOA)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>关键词</label>
+        <input type="text" id="keywordInput" placeholder="如：三文鱼、大黄鱼、虹鳟..." value="三文鱼">
+      </div>
+      <div class="form-group">
+        <label>页数 / 数量</label>
+        <input type="number" id="pagesInput" min="1" max="50" value="1" style="min-width:80px;">
+      </div>
+      <button class="btn btn-primary" id="startCrawlBtn" onclick="startCrawl()">🚀 开始采集</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>📋 任务记录</h3>
+    <div class="task-list" id="taskList">
+      <div class="no-data">暂无任务</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 论文数据 ═══════════════════ -->
+<div class="tab-content" id="tab-papers">
+  <div class="card">
+    <h3>🔍 查询论文</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>关键词（标题/摘要/关键词）</label>
+        <input type="text" id="paperKeyword" placeholder="留空显示全部">
+      </div>
+      <div class="form-group">
+        <label>数量限制</label>
+        <input type="number" id="paperLimit" min="1" max="500" value="50" style="min-width:80px;">
+      </div>
+      <button class="btn btn-primary" onclick="queryPapers()">查 询</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="result-bar">
+      <span class="count" id="paperCount"></span>
+    </div>
+    <div class="table-wrap" id="paperTable"><div class="no-data">请先进行查询</div></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 商品数据 ═══════════════════ -->
+<div class="tab-content" id="tab-products">
+  <div class="card">
+    <h3>🔍 查询商品</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>关键词（标题/搜索词）</label>
+        <input type="text" id="prodKeyword" placeholder="留空显示全部">
+      </div>
+      <div class="form-group">
+        <label>平台</label>
+        <select id="prodPlatform">
+          <option value="">全部</option>
+          <option value="taobao">淘宝</option>
+          <option value="jd">京东</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>数量限制</label>
+        <input type="number" id="prodLimit" min="1" max="500" value="50" style="min-width:80px;">
+      </div>
+      <button class="btn btn-primary" onclick="queryProducts()">查 询</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="result-bar">
+      <span class="count" id="prodCount"></span>
+    </div>
+    <div class="table-wrap" id="prodTable"><div class="no-data">请先进行查询</div></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 渔业政策 ═══════════════════ -->
+<div class="tab-content" id="tab-intel">
+  <div class="card">
+    <h3>🔍 查询渔业政策</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>关键词（标题/内容）</label>
+        <input type="text" id="intelKeyword" placeholder="留空显示全部">
+      </div>
+      <div class="form-group">
+        <label>数量限制</label>
+        <input type="number" id="intelLimit" min="1" max="500" value="50" style="min-width:80px;">
+      </div>
+      <button class="btn btn-primary" onclick="queryIntel()">查 询</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="result-bar">
+      <span class="count" id="intelCount"></span>
+    </div>
+    <div class="table-wrap" id="intelTable"><div class="no-data">请先进行查询</div></div>
+  </div>
+</div>
+
+</div><!-- .container -->
+
+<!-- ═══════════════════ JS ═══════════════════ -->
+<script>
+/* ── Tab 切换 ──────────────────────────────── */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+/* ── 统计 ──────────────────────────────────── */
+async function loadStats() {
+  try {
+    const r = await fetch('/api/stats');
+    const d = await r.json();
+    document.getElementById('statsBar').innerHTML =
+      `<span>📄 论文 ${d.paper_meta || 0}</span>` +
+      `<span>🛒 商品 ${d.product_snapshot || 0}</span>` +
+      `<span>📋 政策 ${d.intel_item || 0}</span>` +
+      `<span>📦 原始事件 ${d.raw_event || 0}</span>`;
+  } catch(e) {
+    document.getElementById('statsBar').textContent = '统计加载失败';
+  }
+}
+loadStats();
+
+/* ── 爬虫描述映射 ─────────────────────────── */
+const CRAWLER_LABELS = {
+  cnki: '知网论文', jd: '京东商品', taobao: '淘宝商品', moa: '农业农村部'
+};
+const STATUS_LABELS = {
+  pending:  ['等待中',  'pending'],
+  running:  ['采集中…', 'running'],
+  done:     ['完成',    'done'],
+  error:    ['失败',    'error'],
+};
+
+/* ── 任务记录 ─────────────────────────────── */
+const tasks = [];  // {id, crawler, keyword, status, result, ...}
+let pollingIds = new Set();
+
+function renderTasks() {
+  const el = document.getElementById('taskList');
+  if (tasks.length === 0) { el.innerHTML = '<div class="no-data">暂无任务</div>'; return; }
+  el.innerHTML = tasks.map(t => {
+    const [label, cls] = STATUS_LABELS[t.status] || ['未知', 'pending'];
+    return `<div class="task-item">
+      <div class="task-meta">
+        <span class="status-badge status-${cls}">${t.status === 'running' ? '<span class="spinner"></span>' : ''}${label}</span>
+        <span><b>${CRAWLER_LABELS[t.crawler] || t.crawler}</b></span>
+        <span>关键词: ${t.keyword || '-'}</span>
+      </div>
+      <div style="color:var(--text-secondary);font-size:12px;">${t.result || ''}</div>
+    </div>`;
+  }).join('');
+}
+
+async function pollTask(taskId) {
+  if (pollingIds.has(taskId)) return;
+  pollingIds.add(taskId);
+  const poll = async () => {
+    try {
+      const r = await fetch('/api/task/' + taskId);
+      const d = await r.json();
+      const idx = tasks.findIndex(t => t.id === taskId);
+      if (idx >= 0) Object.assign(tasks[idx], d);
+      renderTasks();
+      if (d.status === 'running' || d.status === 'pending') {
+        setTimeout(poll, 2000);
+      } else {
+        pollingIds.delete(taskId);
+        loadStats();
+      }
+    } catch(e) {
+      pollingIds.delete(taskId);
+    }
+  };
+  poll();
+}
+
+async function startCrawl() {
+  const crawler = document.getElementById('crawlerSelect').value;
+  const keyword = document.getElementById('keywordInput').value.trim();
+  const pages = parseInt(document.getElementById('pagesInput').value) || 1;
+
+  if (!keyword && crawler !== 'moa') { alert('请输入关键词'); return; }
+
+  const btn = document.getElementById('startCrawlBtn');
+  btn.disabled = true; btn.textContent = '启动中...';
+
+  try {
+    const r = await fetch('/api/crawl', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({crawler, keyword, pages}),
+    });
+    const d = await r.json();
+    if (d.error) { alert(d.error); return; }
+    tasks.unshift({id: d.task_id, crawler, keyword, status: 'pending', result: null});
+    renderTasks();
+    pollTask(d.task_id);
+  } catch(e) {
+    alert('启动失败: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '🚀 开始采集';
+  }
+}
+
+/* ── 通用表格渲染 ─────────────────────────── */
+function renderTable(containerId, columns, rows) {
+  const el = document.getElementById(containerId);
+  if (!rows || rows.length === 0) { el.innerHTML = '<div class="no-data">暂无数据</div>'; return; }
+  let html = '<table><thead><tr>';
+  columns.forEach(c => html += `<th>${c.label}</th>`);
+  html += '</tr></thead><tbody>';
+  rows.forEach(row => {
+    html += '<tr>';
+    columns.forEach(c => {
+      let val = row[c.key] ?? '';
+      if (c.isLink && val) val = `<a href="${val}" target="_blank">链接</a>`;
+      if (c.maxLen && typeof val === 'string' && val.length > c.maxLen)
+        val = `<span title="${val.replace(/"/g,'&quot;')}">${val.substring(0, c.maxLen)}…</span>`;
+      html += `<td>${val}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+/* ── 论文查询 ─────────────────────────────── */
+async function queryPapers() {
+  const kw = document.getElementById('paperKeyword').value.trim();
+  const limit = document.getElementById('paperLimit').value;
+  const params = new URLSearchParams({keyword: kw, limit});
+  try {
+    const r = await fetch('/api/query/papers?' + params);
+    const d = await r.json();
+    document.getElementById('paperCount').textContent = `共 ${d.count} 条结果`;
+    renderTable('paperTable', [
+      {key:'id', label:'ID'},
+      {key:'theme', label:'主题'},
+      {key:'title', label:'标题', maxLen: 60},
+      {key:'authors', label:'作者', maxLen: 30},
+      {key:'source', label:'来源'},
+      {key:'pub_date', label:'发表日期'},
+      {key:'abstract', label:'摘要', maxLen: 80},
+      {key:'keywords_json', label:'关键词', maxLen: 40},
+      {key:'url', label:'链接', isLink: true},
+      {key:'fetched_at', label:'采集时间'},
+    ], d.data);
+  } catch(e) { alert('查询失败: ' + e.message); }
+}
+
+/* ── 商品查询 ─────────────────────────────── */
+async function queryProducts() {
+  const kw = document.getElementById('prodKeyword').value.trim();
+  const platform = document.getElementById('prodPlatform').value;
+  const limit = document.getElementById('prodLimit').value;
+  const params = new URLSearchParams({keyword: kw, platform, limit});
+  try {
+    const r = await fetch('/api/query/products?' + params);
+    const d = await r.json();
+    document.getElementById('prodCount').textContent = `共 ${d.count} 条结果`;
+    renderTable('prodTable', [
+      {key:'id', label:'ID'},
+      {key:'platform', label:'平台'},
+      {key:'keyword', label:'搜索词'},
+      {key:'title', label:'商品名称', maxLen: 50},
+      {key:'price', label:'价格(¥)'},
+      {key:'original_price', label:'原价'},
+      {key:'sales_or_commit', label:'销量/评价'},
+      {key:'shop', label:'店铺', maxLen: 20},
+      {key:'province', label:'省份'},
+      {key:'city', label:'城市'},
+      {key:'detail_url', label:'链接', isLink: true},
+      {key:'snapshot_time', label:'采集时间'},
+    ], d.data);
+  } catch(e) { alert('查询失败: ' + e.message); }
+}
+
+/* ── 政策查询 ─────────────────────────────── */
+async function queryIntel() {
+  const kw = document.getElementById('intelKeyword').value.trim();
+  const limit = document.getElementById('intelLimit').value;
+  const params = new URLSearchParams({keyword: kw, limit});
+  try {
+    const r = await fetch('/api/query/intel?' + params);
+    const d = await r.json();
+    document.getElementById('intelCount').textContent = `共 ${d.count} 条结果`;
+    renderTable('intelTable', [
+      {key:'id', label:'ID'},
+      {key:'source_type', label:'来源类型'},
+      {key:'title', label:'标题', maxLen: 60},
+      {key:'pub_time', label:'发布时间'},
+      {key:'org', label:'发布机构', maxLen: 30},
+      {key:'region', label:'区域'},
+      {key:'content', label:'内容', maxLen: 100},
+      {key:'source_url', label:'链接', isLink: true},
+      {key:'fetched_at', label:'采集时间'},
+    ], d.data);
+  } catch(e) { alert('查询失败: ' + e.message); }
+}
+</script>
+</body>
+</html>

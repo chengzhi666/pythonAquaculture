@@ -1,187 +1,272 @@
-# app.py
+"""
+水产养殖情报采集与分析系统 — Flask 可视化界面
+功能：关键词输入 → 选择爬虫 → 一键采集 → 数据查询/展示
+
+注意事项：
+  - 知网(CNKI)：需手动完成滑块验证
+  - 京东(JD)：需扫码登录
+  - 淘宝(Taobao)：需提前运行 refresh_taobao_cookie.py 获取 cookie
+  - 农业农村部(MOA)：无需额外操作
+"""
 
 import logging
+import os
+import sys
+import threading
+import uuid
+from datetime import datetime, timedelta
+from decimal import Decimal
 
-import streamlit as st
+from flask import Flask, jsonify, render_template, request
 
-from config_mgr import get_config
-from crawlers.cnki_crawler import crawl_cnki
-from crawlers.moa_fishery_crawler import crawl_moa_fishery_tzgg
-from query.cli_query import QueryRow, query_intel
-from runner import run_from_config
-from storage.db import init_db, save_items
+# ── 让 fish_intel_mvp 包可被 import ──────────────────────────────────
+MVP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fish_intel_mvp")
+if MVP_DIR not in sys.path:
+    sys.path.insert(0, MVP_DIR)
 
-# 配置日志
-_cfg = get_config()
-logging.basicConfig(level=getattr(logging, _cfg.LOG_LEVEL, logging.INFO))
+from common.db import get_conn  # noqa: E402
+
+# ── Flask app ────────────────────────────────────────────────────────
+app = Flask(__name__, template_folder="templates", static_folder="static")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-# 初始化数据库
-init_db()
+# ── 任务管理（内存中）──────────────────────────────────────────────────
+_tasks: dict[str, dict] = {}
 
 
-@st.cache_data(ttl=3600)
-def _cached_query(keyword: str, order_by: str) -> list[QueryRow]:
-    """缓存查询结果（1小时）"""
+def _serialise_row(row: dict) -> dict:
+    """将一行数据库结果中的不可 JSON 序列化类型转换为字符串/数字。"""
+    out = {}
+    for k, v in row.items():
+        if isinstance(v, datetime):
+            out[k] = v.strftime("%Y-%m-%d %H:%M:%S")
+        elif isinstance(v, timedelta):
+            out[k] = str(v)
+        elif isinstance(v, Decimal):
+            out[k] = float(v)
+        elif isinstance(v, bytes):
+            out[k] = v.decode("utf-8", errors="replace")
+        else:
+            out[k] = v
+    return out
+
+
+# ── 后台爬虫线程 ──────────────────────────────────────────────────────
+def _run_crawler_thread(task_id: str, crawler_name: str, keyword: str, pages: int):
+    """在后台线程中执行指定爬虫。"""
+    task = _tasks[task_id]
+    task["status"] = "running"
+    task["started_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = None
     try:
-        rows = query_intel(keyword=keyword, order_by=order_by)
-        return rows
-    except Exception as e:
-        logger.error(f"查询失败：{e}")
-        return []
+        conn = get_conn()
 
+        if crawler_name == "cnki":
+            os.environ["CNKI_THEME"] = keyword
+            os.environ["CNKI_PAPERS"] = str(max(1, pages * 10))
+            os.environ["CNKI_HEADLESS"] = "0"          # 需要手动滑块验证，不能无头
+            from jobs.crawl_cnki import run as run_cnki
+            count = run_cnki(conn)
 
-def render_preview(items, limit: int = 20):
-    """展示前 N 条作为预览"""
-    if not items:
-        st.info("没有数据")
-        return
-    preview = [
-        {
-            "时间": it.get("pub_time", ""),
-            "单位": it.get("org", ""),
-            "来源类型": it.get("source_type", ""),
-            "标题": it.get("title", ""),
-            "链接": it.get("source_url", ""),
-        }
-        for it in items[:limit]
-    ]
-    st.subheader(f"本次采集结果预览（前 {limit} 条）")
-    st.table(preview)
+        elif crawler_name == "jd":
+            from jobs.crawl_jd import run as run_jd
+            count = run_jd(conn, keywords=[keyword], pages=pages)
 
+        elif crawler_name == "taobao":
+            from jobs.crawl_taobao import run as run_taobao
+            count = run_taobao(conn, keywords=[keyword], pages=pages)
 
-def page_collect():
-    st.header("情报采集")
+        elif crawler_name == "moa":
+            os.environ["MOA_MAX_PAGES"] = str(pages)
+            from jobs.crawl_moa_fishery import run as run_moa
+            count = run_moa(conn)
 
-    keyword = st.text_input("请输入采集主题关键词（用于知网检索）", "水产养殖")
+        else:
+            raise ValueError(f"未知爬虫: {crawler_name}")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        cnki_num = st.number_input("知网采集篇数", min_value=0, max_value=200, value=20, step=10)
-    with col2:
-        moa_pages = st.number_input(
-            "渔业渔政局通知公告页数", min_value=0, max_value=10, value=1, step=1
-        )
+        task["status"] = "done"
+        task["result"] = f"采集完成，共获取 {count} 条数据"
 
-    st.caption("建议使用“按配置采集”，后续新增网站只需改配置文件，不用改前端/执行器。")
-
-    # 两个按钮并排
-    btn_col1, btn_col2 = st.columns(2)
-
-    # 旧版：写死调用（保留，方便你对照/回退）
-    with btn_col1:
-        if st.button("开始采集（旧版写死调用）"):
+    except Exception as exc:
+        logger.exception("爬虫执行异常: %s", exc)
+        task["status"] = "error"
+        task["result"] = str(exc)
+    finally:
+        task["finished_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if conn:
             try:
-                init_db()
-                all_items = []
-
-                # 1. 知网
-                if cnki_num > 0:
-                    st.write("正在从知网采集数据...")
-                    cnki_items = crawl_cnki(keyword, int(cnki_num))
-                    st.write(f"知网采集完成：{len(cnki_items)} 条")
-                    save_items(cnki_items)
-                    all_items.extend(cnki_items)
-
-                # 2. 渔业渔政局通知公告
-                if moa_pages > 0:
-                    st.write("正在从农业农村部渔业渔政管理局采集通知公告...")
-                    moa_items = crawl_moa_fishery_tzgg(max_pages=int(moa_pages))
-                    st.write(f"渔业渔政局采集完成：{len(moa_items)} 条")
-                    save_items(moa_items)
-                    all_items.extend(moa_items)
-
-                st.success(f"本次共采集并入库 {len(all_items)} 条情报")
-                render_preview(all_items, limit=20)
-
-            except Exception as e:
-                st.error(f"采集失败：{e}")
-
-    # 新版：按配置采集（推荐）
-    with btn_col2:
-        if st.button("按配置采集（推荐）"):
-            try:
-                overrides = {
-                    "cnki.theme": keyword,
-                    "cnki.papers_need": int(cnki_num),
-                    "moa_yyj_tzgg.max_pages": int(moa_pages),
-                }
-                items = run_from_config("config/sites.json", overrides=overrides, save_to_db=True)
-
-                st.success(f"本次共采集并入库 {len(items)} 条情报")
-                render_preview(items, limit=20)
-
-            except FileNotFoundError:
-                st.error("找不到 config/sites.json，请先创建配置文件：config/sites.json")
-            except Exception as e:
-                st.error(f"按配置采集失败：{e}")
+                conn.close()
+            except Exception:
+                pass
 
 
-def page_query():
-    st.header("情报检索")
+# ══════════════════════════════════════════════════════════════════════
+#                              路  由
+# ══════════════════════════════════════════════════════════════════════
 
-    keyword = st.text_input("关键词（在标题或内容中匹配）", "")
-    col1, col2 = st.columns([2, 1])
+@app.route("/")
+def index():
+    return render_template("index.html")
 
-    with col1:
-        order_by_label = st.selectbox(
-            "排序方式", options=["按时间（最新在前）", "按单位+时间", "按区域+时间"], index=0
-        )
 
-    with col2:
-        use_cache = st.checkbox("使用缓存查询", value=True)
+# ── 爬虫相关 ──────────────────────────────────────────────────────────
 
-    if order_by_label == "按时间（最新在前）":
-        ob = "time"
-    elif order_by_label == "按单位+时间":
-        ob = "org_time"
-    else:
-        ob = "region_time"
+@app.route("/api/crawl", methods=["POST"])
+def start_crawl():
+    """启动爬虫任务（异步后台线程）。"""
+    data = request.get_json(force=True)
+    crawler = data.get("crawler", "").strip()
+    keyword = data.get("keyword", "").strip()
+    pages = int(data.get("pages", 1))
 
-    if st.button("开始查询"):
-        try:
-            st.write("正在查询，请稍候...")
+    if not crawler:
+        return jsonify({"error": "请选择一个爬虫"}), 400
+    if not keyword and crawler != "moa":
+        return jsonify({"error": "请输入关键词"}), 400
 
-            if use_cache:
-                rows = _cached_query(keyword=keyword, order_by=ob)
+    task_id = uuid.uuid4().hex[:8]
+    _tasks[task_id] = {
+        "id": task_id,
+        "crawler": crawler,
+        "keyword": keyword,
+        "pages": pages,
+        "status": "pending",
+        "result": None,
+        "started_at": None,
+        "finished_at": None,
+    }
+
+    t = threading.Thread(
+        target=_run_crawler_thread,
+        args=(task_id, crawler, keyword, pages),
+        daemon=True,
+    )
+    t.start()
+    return jsonify({"task_id": task_id, "message": "任务已启动"})
+
+
+@app.route("/api/task/<task_id>")
+def task_status(task_id: str):
+    """查询任务状态。"""
+    task = _tasks.get(task_id)
+    if not task:
+        return jsonify({"error": "任务不存在"}), 404
+    return jsonify(task)
+
+
+# ── 数据查询 ──────────────────────────────────────────────────────────
+
+@app.route("/api/query/papers")
+def query_papers():
+    keyword = request.args.get("keyword", "").strip()
+    limit = min(int(request.args.get("limit", 100)), 500)
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            if keyword:
+                sql = """
+                    SELECT id, theme, title, authors, institute, source, pub_date,
+                           abstract, keywords_json, url, fetched_at
+                    FROM paper_meta
+                    WHERE title LIKE %s OR abstract LIKE %s OR keywords_json LIKE %s
+                    ORDER BY fetched_at DESC LIMIT %s
+                """
+                like = f"%{keyword}%"
+                cur.execute(sql, (like, like, like, limit))
             else:
-                # 清除缓存并重新查询
-                _cached_query.clear()
-                rows = query_intel(keyword=keyword, order_by=ob)
+                sql = """
+                    SELECT id, theme, title, authors, institute, source, pub_date,
+                           abstract, keywords_json, url, fetched_at
+                    FROM paper_meta ORDER BY fetched_at DESC LIMIT %s
+                """
+                cur.execute(sql, (limit,))
+            return jsonify({"count": len(rows := [_serialise_row(r) for r in cur.fetchall()]),
+                            "data": rows})
+    finally:
+        conn.close()
 
-            st.write(f"共查询到 {len(rows)} 条，展示前 50 条：")
 
-            if not rows:
-                st.info("没有查询结果")
+@app.route("/api/query/products")
+def query_products():
+    keyword = request.args.get("keyword", "").strip()
+    platform = request.args.get("platform", "").strip()
+    limit = min(int(request.args.get("limit", 100)), 500)
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            conds, params = [], []
+            if keyword:
+                conds.append("(title LIKE %s OR keyword LIKE %s)")
+                like = f"%{keyword}%"
+                params += [like, like]
+            if platform:
+                conds.append("platform = %s")
+                params.append(platform)
+            where = ("WHERE " + " AND ".join(conds)) if conds else ""
+            sql = f"""
+                SELECT id, platform, keyword, title, price, original_price,
+                       sales_or_commit, shop, province, city, detail_url, snapshot_time
+                FROM product_snapshot {where}
+                ORDER BY snapshot_time DESC LIMIT %s
+            """
+            params.append(limit)
+            cur.execute(sql, params)
+            return jsonify({"count": len(rows := [_serialise_row(r) for r in cur.fetchall()]),
+                            "data": rows})
+    finally:
+        conn.close()
+
+
+@app.route("/api/query/intel")
+def query_intel():
+    keyword = request.args.get("keyword", "").strip()
+    limit = min(int(request.args.get("limit", 100)), 500)
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            if keyword:
+                sql = """
+                    SELECT id, source_type, title, pub_time, org, region,
+                           content, source_url, tags_json, fetched_at
+                    FROM intel_item
+                    WHERE title LIKE %s OR content LIKE %s
+                    ORDER BY fetched_at DESC LIMIT %s
+                """
+                like = f"%{keyword}%"
+                cur.execute(sql, (like, like, limit))
             else:
-                preview = []
-                for pub_time, region, org, title, source_type, url in rows[:50]:
-                    preview.append(
-                        {
-                            "时间": pub_time,
-                            "区域": region,
-                            "单位": org,
-                            "来源类型": source_type,
-                            "标题": title,
-                            "链接": url,
-                        }
-                    )
-                st.table(preview)
-        except Exception as e:
-            logger.error(f"查询失败：{e}")
-            st.error(f"查询失败：{e}")
+                sql = """
+                    SELECT id, source_type, title, pub_time, org, region,
+                           content, source_url, tags_json, fetched_at
+                    FROM intel_item ORDER BY fetched_at DESC LIMIT %s
+                """
+                cur.execute(sql, (limit,))
+            return jsonify({"count": len(rows := [_serialise_row(r) for r in cur.fetchall()]),
+                            "data": rows})
+    finally:
+        conn.close()
 
 
-def main():
-    st.set_page_config(page_title="水产养殖情报采集与分析系统", layout="wide")
-    st.title("水产养殖情报采集与分析系统")
+@app.route("/api/stats")
+def stats():
+    """各表数据量统计。"""
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            result = {}
+            for table in ("paper_meta", "product_snapshot", "intel_item", "raw_event"):
+                try:
+                    cur.execute(f"SELECT COUNT(*) AS cnt FROM {table}")
+                    result[table] = cur.fetchone()["cnt"]
+                except Exception:
+                    result[table] = 0
+            return jsonify(result)
+    finally:
+        conn.close()
 
-    tabs = st.tabs(["采集（输入关键词自动爬取）", "查询（按条件检索历史情报）"])
-    with tabs[0]:
-        page_collect()
-    with tabs[1]:
-        page_query()
 
-
+# ── 启动 ──────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    main()
+    # use_reloader=False: 防止 watchdog 检测到 playwright 等第三方库变化时自动重启，导致任务丢失
+    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
