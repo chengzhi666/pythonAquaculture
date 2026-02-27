@@ -1,5 +1,38 @@
 # pythonAquaculture
 
+## New Contributor: 5-Minute Setup (Windows)
+
+For handing this repo to a new teammate, use this quick path first:
+
+```powershell
+git clone https://github.com/chengzhi666/pythonAquaculture.git
+cd pythonAquaculture
+powershell -ExecutionPolicy Bypass -File .\bootstrap.ps1 -SkipChecks
+```
+
+What the bootstrap now covers:
+
+- Create `.venv` (if missing)
+- Install `.[dev]`
+- Install `fish_intel_mvp/requirements.txt` (includes `playwright`)
+- Install Playwright Chromium runtime
+- Create `.env.local` and `fish_intel_mvp/.env` from templates
+
+Recommended first-run backend (avoids local DrissionPage port/profile issues):
+
+```powershell
+$env:JD_BROWSER_BACKEND='playwright'
+$env:CNKI_BROWSER_BACKEND='playwright'
+$env:TAOBAO_COOKIE_REFRESH_BACKEND='playwright'
+```
+
+Then run one job to verify environment:
+
+```powershell
+.\.venv\Scripts\python fish_intel_mvp\run_one.py jd
+```
+
+Detailed onboarding guide: see [ONBOARDING.md](ONBOARDING.md).
 水产情报采集 MVP。
 目标是把多来源采集统一成一套流程：`跑批 -> 入 MySQL -> 可回溯 -> 可去重`。
 

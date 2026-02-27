@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [switch]$SkipChecks = $false,
-    [switch]$SkipPreCommit = $false
+    [switch]$SkipPreCommit = $false,
+    [switch]$SkipFishIntelDeps = $false,
+    [switch]$SkipPlaywrightInstall = $false
 )
 
 Set-StrictMode -Version Latest
@@ -59,6 +61,18 @@ Invoke-Checked -Exe $VenvPython -Args @("-m", "pip", "install", "--upgrade", "pi
 Write-Step "Installing project dependencies (editable + dev extras)"
 Invoke-Checked -Exe $VenvPython -Args @("-m", "pip", "install", "-e", ".[dev]")
 
+if (-not $SkipFishIntelDeps) {
+    $fishReqPath = Join-Path $ProjectRoot "fish_intel_mvp\requirements.txt"
+    if (Test-Path $fishReqPath) {
+        Write-Step "Installing fish_intel_mvp requirements"
+        Invoke-Checked -Exe $VenvPython -Args @("-m", "pip", "install", "-r", $fishReqPath)
+    } else {
+        Write-Host "[bootstrap] Skip missing file: fish_intel_mvp/requirements.txt" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "[bootstrap] Skip fish_intel_mvp requirements install" -ForegroundColor Yellow
+}
+
 $templates = @(
     @{ Source = ".env.local.example"; Target = ".env.local" },
     @{ Source = "fish_intel_mvp/.env.example"; Target = "fish_intel_mvp/.env" }
@@ -89,6 +103,13 @@ if (-not $SkipPreCommit) {
     Write-Host "[bootstrap] Skip pre-commit install" -ForegroundColor Yellow
 }
 
+if (-not $SkipPlaywrightInstall) {
+    Write-Step "Installing Playwright Chromium runtime"
+    Invoke-Checked -Exe $VenvPython -Args @("-m", "playwright", "install", "chromium")
+} else {
+    Write-Host "[bootstrap] Skip Playwright browser install" -ForegroundColor Yellow
+}
+
 if (-not $SkipChecks) {
     Write-Step "Running ruff"
     Invoke-Checked -Exe $VenvPython -Args @("-m", "ruff", "check", ".")
@@ -106,6 +127,7 @@ Write-Host ""
 Write-Host "Bootstrap completed successfully." -ForegroundColor Green
 Write-Host "Next steps:" -ForegroundColor Green
 Write-Host "  1) Review and edit .env.local and fish_intel_mvp/.env"
-Write-Host "  2) Create a feature branch before coding"
-Write-Host "  3) Push changes via PR and wait for CI"
+Write-Host "  2) Start with: .\.venv\Scripts\python fish_intel_mvp\run_one.py jd"
+Write-Host "  3) Create a feature branch before coding"
+Write-Host "  4) Push changes via PR and wait for CI"
 

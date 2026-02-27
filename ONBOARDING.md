@@ -25,6 +25,8 @@ What `bootstrap.ps1` does:
 
 - Creates `.venv` if missing.
 - Installs project dependencies with dev tools: `pip install -e .[dev]`.
+- Installs crawler runtime deps from `fish_intel_mvp/requirements.txt` (includes `playwright`).
+- Installs Playwright Chromium runtime (`python -m playwright install chromium`).
 - Creates local config files if they do not exist:
   - `.env.local` from `.env.local.example`
   - `fish_intel_mvp/.env` from `fish_intel_mvp/.env.example`
@@ -39,6 +41,12 @@ powershell -ExecutionPolicy Bypass -File .\bootstrap.ps1 -SkipChecks
 
 # Skip pre-commit hook install
 powershell -ExecutionPolicy Bypass -File .\bootstrap.ps1 -SkipPreCommit
+
+# Skip Playwright browser install
+powershell -ExecutionPolicy Bypass -File .\bootstrap.ps1 -SkipPlaywrightInstall
+
+# Skip fish_intel_mvp requirements install
+powershell -ExecutionPolicy Bypass -File .\bootstrap.ps1 -SkipFishIntelDeps
 ```
 
 ## 3) Required Local Config
