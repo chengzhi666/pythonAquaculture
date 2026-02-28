@@ -8,6 +8,7 @@ from datetime import datetime
 
 import pytest
 
+import fish_intel_mvp.jobs.crawl_moa_prices as moa_prices
 from fish_intel_mvp.jobs.crawl_moa_prices import (
     DEFAULT_AQUATIC_KEYWORDS,
     SALMON_FILTER_RE,
@@ -217,6 +218,92 @@ class TestFilterAquaticRows:
 
     def test_empty_input(self):
         assert filter_aquatic_rows([]) == []
+
+
+# ==================== run() 过滤行为 ====================
+
+
+class _DummyPage:
+    def goto(self, *args, **kwargs):
+        return None
+
+    def wait_for_timeout(self, *args, **kwargs):
+        return None
+
+
+class _DummyContext:
+    def new_page(self):
+        return _DummyPage()
+
+    def close(self):
+        return None
+
+
+class _DummyBrowser:
+    def new_context(self, **kwargs):
+        return _DummyContext()
+
+    def close(self):
+        return None
+
+
+class _DummyChromium:
+    def launch(self, **kwargs):
+        return _DummyBrowser()
+
+
+class _DummyPlaywright:
+    def __init__(self):
+        self.chromium = _DummyChromium()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+def _run_with_fake_browser(monkeypatch: pytest.MonkeyPatch, strict: str):
+    monkeypatch.setenv("MOA_PRICE_STRICT_FILTER", strict)
+    monkeypatch.setenv("MOA_PRICE_HEADLESS", "1")
+    monkeypatch.setattr(moa_prices, "sync_playwright", lambda: _DummyPlaywright())
+    monkeypatch.setattr(moa_prices, "_resolve_chrome_path", lambda: "")
+
+    varieties = [
+        {"id": "1000", "name": "活草鱼"},
+        {"id": "1018", "name": "三文鱼"},
+    ]
+    chart_map = {
+        "1000": {"x": ["武汉白沙洲"], "y": [9.0], "date": "2026-02-27"},
+        "1018": {"x": ["广州黄沙"], "y": [88.5], "date": "2026-02-27"},
+    }
+    monkeypatch.setattr(moa_prices, "_fetch_varieties", lambda page, pid: varieties)
+    monkeypatch.setattr(
+        moa_prices,
+        "_fetch_price_chart",
+        lambda page, variety_id, market_ids="", province_codes="": chart_map[variety_id],
+    )
+
+    written_titles: list[str] = []
+
+    def _fake_insert_raw_event(*args, **kwargs):
+        written_titles.append(kwargs.get("title", ""))
+
+    monkeypatch.setattr(moa_prices, "insert_raw_event", _fake_insert_raw_event)
+    count = moa_prices.run(conn=object())
+    return count, written_titles
+
+
+class TestRunFilterBehavior:
+    def test_non_strict_keeps_all_aquatic_rows(self, monkeypatch: pytest.MonkeyPatch):
+        count, titles = _run_with_fake_browser(monkeypatch, strict="0")
+        assert count == 2
+        assert set(titles) == {"活草鱼", "三文鱼"}
+
+    def test_strict_only_keeps_salmon_related_rows(self, monkeypatch: pytest.MonkeyPatch):
+        count, titles = _run_with_fake_browser(monkeypatch, strict="1")
+        assert count == 1
+        assert titles == ["三文鱼"]
 
 
 # ==================== 品种推断 ====================
