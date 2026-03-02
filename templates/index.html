@@ -142,6 +142,7 @@ td a:hover { text-decoration: underline; }
   <button class="tab-btn active" data-tab="collect">📥 数据采集</button>
   <button class="tab-btn" data-tab="papers">📄 论文数据</button>
   <button class="tab-btn" data-tab="products">🛒 商品数据</button>
+  <button class="tab-btn" data-tab="offline">🏪 线下价格</button>
   <button class="tab-btn" data-tab="intel">📋 渔业政策</button>
 </div>
 
@@ -156,19 +157,23 @@ td a:hover { text-decoration: underline; }
       ● <b>知网(CNKI)</b>：浏览器会弹出，需手动完成滑块验证后自动继续采集<br>
       ● <b>京东(JD)</b>：浏览器会弹出，需手机扫码登录后自动继续采集<br>
       ● <b>淘宝(Taobao)</b>：需提前运行 <code>refresh_taobao_cookie.py</code> 获取 Cookie<br>
-      ● <b>农业农村部(MOA)</b>：无需额外操作，直接采集
+      ● <b>农业农村部政策(MOA)</b>：无需额外操作，直接采集<br>
+      ● <b>🎯 虹鳟/帝王鲑专用</b>：自动用数据字典识别品种+规格+产地，采集淘宝+京东<br>
+      ● <b>线下价格(MOA价格)</b>：采集农业农村部批发市场水产品价格数据
     </div>
     <div class="form-row">
       <div class="form-group">
         <label>爬虫选择</label>
-        <select id="crawlerSelect">
+        <select id="crawlerSelect" onchange="onCrawlerChange()">
           <option value="cnki">📄 知网论文 (CNKI)</option>
           <option value="jd">🛒 京东商品 (JD)</option>
           <option value="taobao">🛍️ 淘宝商品 (Taobao)</option>
+          <option value="salmon">🎯 虹鳟/帝王鲑专用采集</option>
           <option value="moa">📋 农业农村部渔业政策 (MOA)</option>
+          <option value="moa_prices">🏪 农业农村部线下价格 (MOA价格)</option>
         </select>
       </div>
-      <div class="form-group">
+      <div class="form-group" id="keywordGroup">
         <label>关键词</label>
         <input type="text" id="keywordInput" placeholder="如：三文鱼、大黄鱼、虹鳟..." value="三文鱼">
       </div>
@@ -184,6 +189,22 @@ td a:hover { text-decoration: underline; }
     <h3>📋 任务记录</h3>
     <div class="task-list" id="taskList">
       <div class="no-data">暂无任务</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>📁 CSV 线下价格导入</h3>
+    <div class="tips">
+      支持将 <code>price_offline_*.csv</code> 文件直接导入到 <code>offline_price_snapshot</code> 表。
+      CSV 需包含表头：来源、市场、地区、品种、品名、规格、最低价、最高价、均价、单位、日期等。
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>选择 CSV 文件</label>
+        <input type="file" id="csvFileInput" accept=".csv" style="min-width:280px;">
+      </div>
+      <button class="btn btn-outline" onclick="importCsv()">📤 导入</button>
+      <span id="csvResult" style="font-size:13px;color:var(--text-secondary);"></span>
     </div>
   </div>
 </div>
@@ -226,7 +247,9 @@ td a:hover { text-decoration: underline; }
         <select id="prodPlatform">
           <option value="">全部</option>
           <option value="taobao">淘宝</option>
+          <option value="taobao_salmon">淘宝(虹鳟专用)</option>
           <option value="jd">京东</option>
+          <option value="jd_salmon">京东(虹鳟专用)</option>
         </select>
       </div>
       <div class="form-group">
@@ -241,6 +264,30 @@ td a:hover { text-decoration: underline; }
       <span class="count" id="prodCount"></span>
     </div>
     <div class="table-wrap" id="prodTable"><div class="no-data">请先进行查询</div></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 线下价格 ═══════════════════ -->
+<div class="tab-content" id="tab-offline">
+  <div class="card">
+    <h3>🔍 查询线下批发市场价格</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>关键词（品名/品种/市场）</label>
+        <input type="text" id="offlineKeyword" placeholder="留空显示全部">
+      </div>
+      <div class="form-group">
+        <label>数量限制</label>
+        <input type="number" id="offlineLimit" min="1" max="500" value="50" style="min-width:80px;">
+      </div>
+      <button class="btn btn-primary" onclick="queryOffline()">查 询</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="result-bar">
+      <span class="count" id="offlineCount"></span>
+    </div>
+    <div class="table-wrap" id="offlineTable"><div class="no-data">请先进行查询</div></div>
   </div>
 </div>
 
@@ -290,6 +337,7 @@ async function loadStats() {
     document.getElementById('statsBar').innerHTML =
       `<span>📄 论文 ${d.paper_meta || 0}</span>` +
       `<span>🛒 商品 ${d.product_snapshot || 0}</span>` +
+      `<span>🏪 线下价格 ${d.offline_price_snapshot || 0}</span>` +
       `<span>📋 政策 ${d.intel_item || 0}</span>` +
       `<span>📦 原始事件 ${d.raw_event || 0}</span>`;
   } catch(e) {
@@ -300,7 +348,8 @@ loadStats();
 
 /* ── 爬虫描述映射 ─────────────────────────── */
 const CRAWLER_LABELS = {
-  cnki: '知网论文', jd: '京东商品', taobao: '淘宝商品', moa: '农业农村部'
+  cnki: '知网论文', jd: '京东商品', taobao: '淘宝商品',
+  salmon: '🎯虹鳟/帝王鲑', moa: '农业农村部政策', moa_prices: '线下价格'
 };
 const STATUS_LABELS = {
   pending:  ['等待中',  'pending'],
@@ -357,7 +406,7 @@ async function startCrawl() {
   const keyword = document.getElementById('keywordInput').value.trim();
   const pages = parseInt(document.getElementById('pagesInput').value) || 1;
 
-  if (!keyword && crawler !== 'moa') { alert('请输入关键词'); return; }
+  if (!keyword && !['moa','moa_prices','salmon'].includes(crawler)) { alert('请输入关键词'); return; }
 
   const btn = document.getElementById('startCrawlBtn');
   btn.disabled = true; btn.textContent = '启动中...';
@@ -474,6 +523,65 @@ async function queryIntel() {
       {key:'fetched_at', label:'采集时间'},
     ], d.data);
   } catch(e) { alert('查询失败: ' + e.message); }
+}
+
+/* ── 线下价格查询 ───────────────────── */
+async function queryOffline() {
+  const kw = document.getElementById('offlineKeyword').value.trim();
+  const limit = document.getElementById('offlineLimit').value;
+  const params = new URLSearchParams({keyword: kw, limit});
+  try {
+    const r = await fetch('/api/query/offline_prices?' + params);
+    const d = await r.json();
+    document.getElementById('offlineCount').textContent = `共 ${d.count} 条结果`;
+    renderTable('offlineTable', [
+      {key:'id', label:'ID'},
+      {key:'source_name', label:'数据源'},
+      {key:'market_name', label:'市场'},
+      {key:'region', label:'地区'},
+      {key:'product_type', label:'品种'},
+      {key:'product_name_raw', label:'原始品名', maxLen: 30},
+      {key:'min_price', label:'最低价'},
+      {key:'max_price', label:'最高价'},
+      {key:'price', label:'均价'},
+      {key:'unit', label:'单位'},
+      {key:'storage_method', label:'储存方式'},
+      {key:'snapshot_time', label:'采集时间'},
+    ], d.data);
+  } catch(e) { alert('查询失败: ' + e.message); }
+}
+
+/* ── CSV 导入 ───────────────────────── */
+async function importCsv() {
+  const fileInput = document.getElementById('csvFileInput');
+  if (!fileInput.files.length) { alert('请先选择 CSV 文件'); return; }
+  const fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+  const el = document.getElementById('csvResult');
+  el.textContent = '导入中...';
+  try {
+    const r = await fetch('/api/import/csv', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.error) { el.textContent = '✖ ' + d.error; el.style.color = 'var(--error)'; }
+    else { el.textContent = `✔ 导入 ${d.inserted} 条，跳过 ${d.skipped} 条，错误 ${d.errors} 条`; el.style.color = 'var(--success)'; loadStats(); }
+  } catch(e) { el.textContent = '导入失败: ' + e.message; el.style.color = 'var(--error)'; }
+}
+
+/* ── 爬虫选择联动 ─────────────────── */
+function onCrawlerChange() {
+  const v = document.getElementById('crawlerSelect').value;
+  const kwGroup = document.getElementById('keywordGroup');
+  const kwInput = document.getElementById('keywordInput');
+  // MOA政策、MOA价格、虹鳟专用不需要关键词（有默认值）
+  if (['moa', 'moa_prices'].includes(v)) {
+    kwInput.placeholder = '无需填写';
+    kwInput.value = '';
+  } else if (v === 'salmon') {
+    kwInput.placeholder = '默认：虹鳟,帝王鲑,帝王三文鱼';
+    kwInput.value = '虹鳟,帝王鲑';
+  } else {
+    kwInput.placeholder = '如：三文鱼、大黄鱼、虹鳟...';
+  }
 }
 </script>
 </body>

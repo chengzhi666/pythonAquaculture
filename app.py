@@ -63,11 +63,31 @@ def _run_crawler_thread(task_id: str, crawler_name: str, keyword: str, pages: in
         conn = get_conn()
 
         if crawler_name == "cnki":
-            os.environ["CNKI_THEME"] = keyword
-            os.environ["CNKI_PAPERS"] = str(max(1, pages * 10))
-            os.environ["CNKI_HEADLESS"] = "0"          # 需要手动滑块验证，不能无头
-            from jobs.crawl_cnki import run as run_cnki
-            count = run_cnki(conn)
+            # CNKI 用子进程运行，避免 sync_playwright 在后台线程中 asyncio 冲突
+            import subprocess
+            env = os.environ.copy()
+            env["CNKI_THEME"] = keyword
+            env["CNKI_PAPERS"] = str(max(1, pages * 10))
+            env["CNKI_HEADLESS"] = "0"   # 需要手动完成滑块验证，不能无头
+            env["PYTHONUTF8"] = "1"      # 避免 Windows GBK 编码导致中文输出崩溃
+            script = os.path.join(MVP_DIR, "jobs", "crawl_cnki.py")
+            # stdout 直接输出到 Flask 控制台，stderr 捕获用于错误报告
+            result = subprocess.run(
+                [sys.executable, script],
+                env=env,
+                cwd=MVP_DIR,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if result.returncode != 0:
+                err_msg = (result.stderr or "")[-1000:].strip()
+                raise RuntimeError(err_msg or "crawl_cnki 子进程异常退出")
+            # 查库获取今日采集条数
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) AS cnt FROM paper_meta WHERE DATE(fetched_at) = CURDATE()")
+            count = (cur.fetchone() or {}).get("cnt", 0)
 
         elif crawler_name == "jd":
             from jobs.crawl_jd import run as run_jd
@@ -81,6 +101,17 @@ def _run_crawler_thread(task_id: str, crawler_name: str, keyword: str, pages: in
             os.environ["MOA_MAX_PAGES"] = str(pages)
             from jobs.crawl_moa_fishery import run as run_moa
             count = run_moa(conn)
+
+        elif crawler_name == "salmon":
+            from jobs.crawl_salmon import run as run_salmon
+            # 支持通过 keyword 覆盖默认关键词
+            if keyword:
+                os.environ["SALMON_KEYWORDS"] = keyword
+            count = run_salmon(conn)
+
+        elif crawler_name == "moa_prices":
+            from jobs.crawl_moa_prices import run as run_moa_prices
+            count = run_moa_prices(conn)
 
         else:
             raise ValueError(f"未知爬虫: {crawler_name}")
@@ -122,7 +153,7 @@ def start_crawl():
 
     if not crawler:
         return jsonify({"error": "请选择一个爬虫"}), 400
-    if not keyword and crawler != "moa":
+    if not keyword and crawler not in ("moa", "moa_prices", "salmon"):
         return jsonify({"error": "请输入关键词"}), 400
 
     task_id = uuid.uuid4().hex[:8]
@@ -248,6 +279,77 @@ def query_intel():
         conn.close()
 
 
+@app.route("/api/query/offline_prices")
+def query_offline_prices():
+    """查询线下价格数据。"""
+    keyword = request.args.get("keyword", "").strip()
+    limit = min(int(request.args.get("limit", 100)), 500)
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            if keyword:
+                sql = """
+                    SELECT id, source_name, market_name, region, product_type,
+                           product_name_raw, spec, min_price, max_price, price,
+                           unit, storage_method, date_str, snapshot_time
+                    FROM offline_price_snapshot
+                    WHERE product_name_raw LIKE %s OR product_type LIKE %s
+                       OR market_name LIKE %s
+                    ORDER BY snapshot_time DESC LIMIT %s
+                """
+                like = f"%{keyword}%"
+                cur.execute(sql, (like, like, like, limit))
+            else:
+                sql = """
+                    SELECT id, source_name, market_name, region, product_type,
+                           product_name_raw, spec, min_price, max_price, price,
+                           unit, storage_method, date_str, snapshot_time
+                    FROM offline_price_snapshot
+                    ORDER BY snapshot_time DESC LIMIT %s
+                """
+                cur.execute(sql, (limit,))
+            return jsonify({"count": len(rows := [_serialise_row(r) for r in cur.fetchall()]),
+                            "data": rows})
+    finally:
+        conn.close()
+
+
+@app.route("/api/import/csv", methods=["POST"])
+def import_csv():
+    """上传 CSV 文件导入线下价格数据。"""
+    if "file" not in request.files:
+        return jsonify({"error": "请上传 CSV 文件"}), 400
+    f = request.files["file"]
+    if not f.filename or not f.filename.endswith(".csv"):
+        return jsonify({"error": "仅支持 .csv 文件"}), 400
+
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="wb")
+    try:
+        f.save(tmp)
+        tmp.close()
+        from jobs.import_offline_prices import import_csv_file
+        conn = get_conn()
+        try:
+            result = import_csv_file(conn, tmp.name)
+            return jsonify({
+                "message": f"导入完成",
+                "inserted": result.get("inserted", 0),
+                "skipped": result.get("skipped", 0),
+                "errors": result.get("errors", 0),
+            })
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.exception("CSV导入失败: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except Exception:
+            pass
+
+
 @app.route("/api/stats")
 def stats():
     """各表数据量统计。"""
@@ -255,7 +357,7 @@ def stats():
     try:
         with conn.cursor() as cur:
             result = {}
-            for table in ("paper_meta", "product_snapshot", "intel_item", "raw_event"):
+            for table in ("paper_meta", "product_snapshot", "intel_item", "raw_event", "offline_price_snapshot"):
                 try:
                     cur.execute(f"SELECT COUNT(*) AS cnt FROM {table}")
                     result[table] = cur.fetchone()["cnt"]

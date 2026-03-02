@@ -12,10 +12,39 @@ except ModuleNotFoundError:
     from common.db import get_conn, insert_raw_event, upsert_paper
 
 
+def _handle_cnki_verify(page, timeout_sec=120):
+    """检测并等待用户完成 CNKI 安全验证（滑块拼图）。
+
+    CNKI 触发反爬时会重定向到 /verify/home?captchaType=blockPuzzle 页面，
+    需要用户手动拖拽滑块完成验证后自动跳回检索页。
+    仅在非无头模式下有意义。
+    """
+    deadline = time.time() + timeout_sec
+    prompted = False
+    while time.time() < deadline:
+        current_url = page.url or ""
+        if "/verify/" in current_url or "captchaType" in current_url:
+            if not prompted:
+                print(f"[CNKI] 检测到安全验证页面，请在弹出的浏览器中完成滑块验证（{timeout_sec}s 超时）")
+                prompted = True
+            page.wait_for_timeout(1000)
+            continue
+        # 验证完成或无需验证
+        if prompted:
+            print("[CNKI] 安全验证完成，继续采集")
+            page.wait_for_timeout(2000)  # 等页面跳转稳定
+        return
+    raise TimeoutError(f"等待知网安全验证超时（{timeout_sec}s），请确保在浏览器中完成滑块验证")
+
+
 def open_page(page, theme):
     # 打开高级检索页面
     page.goto("https://kns.cnki.net/kns8/AdvSearch", wait_until="domcontentloaded")
     page.set_viewport_size({"width": 1600, "height": 1000})
+
+    # ===== 0. 处理安全验证（滑块拼图）=====
+    # CNKI 可能会重定向到 /verify/home 要求完成滑块验证
+    _handle_cnki_verify(page)
 
     # ===== 1. 主题输入框（第 1 行）=====
     topic_xpath = "//div[@class='gradeSearch']//dl[@id='gradetxt']/dd[1]//input[@type='text' and @maxlength='120']"
@@ -31,10 +60,18 @@ def open_page(page, theme):
     # source_input.fill("期刊")
 
     # ===== 3. 点击"检索"按钮 =====
+    # 先尝试关闭右侧推荐侧边栏（它可能遮挡搜索按钮）
+    try:
+        sidebar = page.locator("div.search-sidebar-b")
+        if sidebar.count() > 0:
+            page.evaluate("document.querySelector('.search-sidebar-b')?.remove()")
+            page.wait_for_timeout(500)
+    except Exception:
+        pass
     search_button_xpath = "//div[@class='search-buttons']/input[@class='btn-search']"
     search_btn = page.locator(f"xpath={search_button_xpath}")
     search_btn.wait_for(state="visible", timeout=30000)
-    search_btn.click()
+    search_btn.click(force=True)  # force=True 绕过遮挡检测
 
     # 等待点击后的页面导航/加载完成
     page.wait_for_load_state("domcontentloaded", timeout=45000)
@@ -60,7 +97,7 @@ def open_page(page, theme):
             # 用 expect_navigation 确保等到搜索结果页加载
             try:
                 with page.expect_navigation(wait_until="domcontentloaded", timeout=45000):
-                    search_btn2.click()
+                    search_btn2.click(force=True)
             except Exception:
                 # 如果没发生导航（AJAX加载结果），等一下就好
                 page.wait_for_timeout(3000)
@@ -316,10 +353,9 @@ def run(conn) -> int:
 
 
 if __name__ == "__main__":
-    # 设置搜索主题
-    theme = "python"
-    # 设置所需篇数
-    papers_need = 20
+    # 优先读取环境变量（Flask 子进程模式），否则使用默认值
+    theme = os.getenv("CNKI_THEME", "python").strip() or "python"
+    papers_need = max(1, int(os.getenv("CNKI_PAPERS", "20")))
 
     # 连接数据库
     conn = None

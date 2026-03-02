@@ -40,13 +40,13 @@ Detailed onboarding guide: see [ONBOARDING.md](ONBOARDING.md).
 
 项目当前以 **MySQL 作为主存储**，并保留 SQLite 作为可选本地模式：
 
-### 系统一：Streamlit WebUI（默认 MySQL）
+### 系统一：Flask WebUI（默认 MySQL）
 
 - **入口**：`app.py`
 - **数据库**：默认 MySQL（可通过 `STORAGE_BACKEND=sqlite` 切换到本地 SQLite）
 - **用途**：快速展示、交互式采集、情报检索
 - **爬虫模块**：`crawlers/` 目录下的爬虫
-- **运行方式**：`streamlit run app.py`
+- **运行方式**：`python app.py`（访问 `http://localhost:5000`）
 
 ### 系统二：批量处理系统（MySQL）
 
@@ -70,7 +70,9 @@ Detailed onboarding guide: see [ONBOARDING.md](ONBOARDING.md).
 
 ```text
 pythonAquaculture/
-  app.py                        # Streamlit WebUI 入口
+  app.py                        # Flask WebUI 入口
+  templates/
+    index.html                  # 前端单页面（含 5 个 Tab 页签）
   runner.py                     # 配置驱动的采集框架
   config/
     sites.json                  # 采集源配置文件
@@ -113,20 +115,21 @@ pip install -r fish_intel_mvp\requirements.txt
 
 ## 快速开始
 
-### 方案 A：Streamlit WebUI（默认走 MySQL）
+### 方案 A：Flask WebUI（默认走 MySQL）
 
 ```powershell
 .\.venv\Scripts\activate
-streamlit run app.py
+python app.py
 ```
 
-然后在浏览器访问 `http://localhost:8501`。
+然后在浏览器访问 `http://localhost:5000`。
 
 **特点**：
 
+- 5 个 Tab 页签：📥 数据采集 / 📄 论文数据 / 🛒 商品数据 / 🏪 线下价格 / 📋 渔业政策
 - 与批处理系统共用 MySQL 数据
 - 交互式操作，即时反馈
-- 可选切换到本地 SQLite（`STORAGE_BACKEND=sqlite`）
+- 可选切换到本地 SQLite：`$env:STORAGE_BACKEND='sqlite'; python app.py`
 
 ### 方案 B：批量处理系统（推荐生产环境）
 
@@ -275,7 +278,7 @@ LIMIT 20;
 - ✅ **批量插入优化**：SQLite 使用事务提高性能
 - ✅ **日志系统**：统一的日志记录和错误处理
 - ✅ **工具函数**：提取公共的文本处理函数（`crawlers/utils.py`）
-- ✅ **Streamlit 缓存**：查询结果缓存（1小时）
+- ✅ **Flask REST API**：后端接口分离，前端单页面通过 `/api/...` 与后端交互
 - ✅ **配置管理**：统一的环境变量管理（`config_mgr.py`）
 - ✅ **项目规范**：`pyproject.toml` 和 `pytest` 测试框架
 - ✅ **测试框架**：单元测试示例（`tests/test_storage.py`）

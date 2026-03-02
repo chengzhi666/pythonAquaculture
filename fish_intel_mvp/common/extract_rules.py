@@ -669,3 +669,56 @@ class SalmonDataEnricher:
             "nutrition_fat_g_per_100g": None,
             "nutrition_omega3_g_per_100g": omega3 if omega3 > 0 else None,
         }
+
+
+if __name__ == "__main__":
+    """离线自测：使用内置默认规则，无需数据库连接。"""
+    SAMPLE_ITEMS = [
+        {"title": "智利帝王鲑刺身级冷冻整条 5kg 进口 king salmon", "price": 680},
+        {"title": "国产虹鳟鱼片冰鲜青海产 500g/袋 rainbow trout", "price": 89},
+        {"title": "挪威三文鱼头 冷冻 1斤装 omega-3丰富 ASC认证", "price": 35},
+        {"title": "大西洋鲑鱼排 新鲜空运 每份400g 有机认证", "price": 128},
+        {"title": "帝王三文鱼腩 法罗群岛进口 2lb 冷鲜", "price": 260},
+    ]
+
+    type_ext = ProductTypeExtractor(conn=None)
+    spec_ext = SpecExtractor(conn=None)
+    origin_ext = OriginExtractor(conn=None)
+
+    print("=" * 70)
+    print(f"{'商品标题':<40} {'品种':<16} {'置信度':>6}")
+    print("=" * 70)
+    for item in SAMPLE_ITEMS:
+        title = item["title"]
+        t = type_ext.extract(title=title)
+        s = spec_ext.extract(title=title)
+        o = origin_ext.extract(title=title)
+
+        product_type = t.get("product_type", "-")
+        confidence = t.get("product_type_confidence") or 0.0
+        weight = s.get("spec_weight_normalized", "-")
+        origin = o.get("origin_standardized", "-")
+
+        print(f"{title[:38]:<40} {product_type:<16} {confidence:>6.0%}")
+        print(f"  规格: {weight}  | 产地: {origin}")
+        print("-" * 70)
+
+    print()
+    print("【规格解析详细示例】")
+    spec_cases = [
+        "2.5kg/条 帝王鲑",
+        "3斤装 虹鳟鱼",
+        "500g*2袋",
+        "1lb 三文鱼",
+        "200g",
+    ]
+    for text in spec_cases:
+        result = spec_ext.extract(title=text)
+        print(
+            f"  {text:<20} → value={result.get('spec_weight_value')} "
+            f"unit={result.get('spec_weight_unit')} "
+            f"grams={result.get('spec_weight_grams')} "
+            f"count={result.get('spec_pack_count')} "
+            f"total_g={result.get('spec_total_weight_grams')} "
+            f"normalized={result.get('spec_weight_normalized')}"
+        )
