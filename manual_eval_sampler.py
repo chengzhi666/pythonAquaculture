@@ -1,0 +1,211 @@
+"""
+Create a stratified manual-evaluation workbook from the generated SFT dataset.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import random
+from collections import defaultdict
+from pathlib import Path
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font
+
+from sft_generator import TEMPLATE_LABELS
+
+
+def load_jsonl_rows(input_path: Path) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    with input_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rows.append(json.loads(line))
+    return rows
+
+
+def stratified_sample(rows: list[dict[str, object]], sample_size: int, seed: int) -> list[dict[str, object]]:
+    if sample_size <= 0 or not rows:
+        return []
+
+    rng = random.Random(seed)
+    grouped: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for row in rows:
+        grouped[str(row.get("template_type", "unknown"))].append(row)
+
+    for group_rows in grouped.values():
+        rng.shuffle(group_rows)
+
+    template_types = sorted(grouped.keys())
+    if not template_types:
+        return []
+
+    base_quota = sample_size // len(template_types)
+    selected: list[dict[str, object]] = []
+    leftovers: list[dict[str, object]] = []
+
+    for template_type in template_types:
+        group_rows = grouped[template_type]
+        take = min(base_quota, len(group_rows))
+        selected.extend(group_rows[:take])
+        leftovers.extend(group_rows[take:])
+
+    if len(selected) < sample_size and leftovers:
+        rng.shuffle(leftovers)
+        selected.extend(leftovers[: sample_size - len(selected)])
+
+    return selected[: min(sample_size, len(rows))]
+
+
+def build_eval_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    eval_rows: list[dict[str, object]] = []
+    for index, row in enumerate(rows, start=1):
+        template_type = str(row.get("template_type", "unknown"))
+        eval_rows.append(
+            {
+                "sample_no": index,
+                "template_type": template_type,
+                "template_label": TEMPLATE_LABELS.get(template_type, template_type),
+                "source_title": row.get("source_title", ""),
+                "source_section": row.get("source_section", ""),
+                "cot_injected": row.get("cot_injected", False),
+                "instruction": row.get("instruction", ""),
+                "input": row.get("input", ""),
+                "output": row.get("output", ""),
+                "fact_correctness": "",
+                "logic_coherence": "",
+                "completeness": "",
+                "overall_score": "",
+                "reviewer": "",
+                "comments": "",
+            }
+        )
+    return eval_rows
+
+
+def export_csv(rows: list[dict[str, object]], output_path: Path) -> None:
+    import csv
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        output_path.write_text("", encoding="utf-8")
+        return
+    fieldnames = list(rows[0].keys())
+    with output_path.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def export_xlsx(rows: list[dict[str, object]], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "manual_eval"
+
+    if not rows:
+        workbook.save(output_path)
+        return
+
+    headers = list(rows[0].keys())
+    sheet.append(headers)
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+    for row in rows:
+        sheet.append([row.get(header, "") for header in headers])
+
+    width_map = {
+        "sample_no": 10,
+        "template_type": 16,
+        "template_label": 16,
+        "source_title": 30,
+        "source_section": 18,
+        "cot_injected": 12,
+        "instruction": 38,
+        "input": 55,
+        "output": 70,
+        "fact_correctness": 16,
+        "logic_coherence": 16,
+        "completeness": 16,
+        "overall_score": 14,
+        "reviewer": 14,
+        "comments": 24,
+    }
+
+    for column_cells in sheet.columns:
+        header = str(column_cells[0].value)
+        sheet.column_dimensions[column_cells[0].column_letter].width = width_map.get(header, 18)
+        for cell in column_cells[1:]:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+    workbook.save(output_path)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Sample 100 SFT rows for manual evaluation.")
+    parser.add_argument(
+        "--input",
+        default="results/sft_generation/sft_dataset.jsonl",
+        help="Input JSONL generated by run_sft_generation.py.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="results/sft_generation/manual_eval",
+        help="Output directory for CSV and XLSX files.",
+    )
+    parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=100,
+        help="Number of rows to sample for human scoring.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=20260320,
+        help="Random seed for reproducible sampling.",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    input_path = Path(args.input)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    rows = load_jsonl_rows(input_path)
+    sampled_rows = stratified_sample(rows, sample_size=args.sample_size, seed=args.seed)
+    eval_rows = build_eval_rows(sampled_rows)
+
+    csv_path = output_dir / "manual_eval_sample.csv"
+    xlsx_path = output_dir / "manual_eval_sample.xlsx"
+    export_csv(eval_rows, csv_path)
+    export_xlsx(eval_rows, xlsx_path)
+
+    summary = {
+        "input_path": str(input_path),
+        "total_rows": len(rows),
+        "sample_size": len(sampled_rows),
+        "seed": args.seed,
+        "csv_path": str(csv_path),
+        "xlsx_path": str(xlsx_path),
+    }
+    (output_dir / "manual_eval_summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    print(f"Loaded rows: {len(rows)}")
+    print(f"Sampled rows: {len(sampled_rows)}")
+    print(f"CSV: {csv_path}")
+    print(f"XLSX: {xlsx_path}")
+
+
+if __name__ == "__main__":
+    main()

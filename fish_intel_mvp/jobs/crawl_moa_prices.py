@@ -46,10 +46,12 @@ else:
 try:
     from common.db import get_conn, insert_raw_event
     from common.logger import get_logger
+    from jobs.import_offline_prices import upsert_offline_price_snapshot
 except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
     from common.db import get_conn, insert_raw_event
     from common.logger import get_logger
+    from import_offline_prices import upsert_offline_price_snapshot
 
 LOGGER = get_logger(__name__)
 
@@ -709,7 +711,7 @@ def run(conn, *, url: Optional[str] = None) -> int:
     for row in filtered:
         normalized = normalize_row(row, snapshot_time=snapshot_time)
         try:
-            insert_raw_event(
+            raw_id = insert_raw_event(
                 conn,
                 source_name=SOURCE_NAME,
                 url=target_url,
@@ -727,6 +729,7 @@ def run(conn, *, url: Optional[str] = None) -> int:
                 ),
                 raw_text=None,
             )
+            upsert_offline_price_snapshot(conn, normalized, raw_id=raw_id)
             written += 1
         except Exception as exc:
             LOGGER.warning(
