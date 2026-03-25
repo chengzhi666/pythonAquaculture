@@ -33,6 +33,86 @@ Then run one job to verify environment:
 ```
 
 Detailed onboarding guide: see [ONBOARDING.md](ONBOARDING.md).
+
+## Thesis Sync: What To Install
+
+If a junior teammate only needs to sync the latest thesis/demo progress,
+install these first:
+
+- Windows 10/11
+- Python 3.9 to 3.11
+- Git
+- MySQL 8.x
+- Playwright Chromium runtime
+
+Recommended setup:
+
+```powershell
+git clone https://github.com/chengzhi666/pythonAquaculture.git
+cd pythonAquaculture
+python -m venv .venv
+.\.venv\Scripts\activate
+python -m pip install -U pip
+pip install -e .[dev]
+pip install -r fish_intel_mvp\requirements.txt
+python -m playwright install chromium
+```
+
+Create local config files:
+
+```powershell
+Copy-Item .env.local.example .env.local
+Copy-Item fish_intel_mvp\.env.example fish_intel_mvp\.env
+```
+
+Then fill in the MySQL settings in `fish_intel_mvp/.env`.
+
+Initialize MySQL once:
+
+```sql
+CREATE DATABASE IF NOT EXISTS fish_intel DEFAULT CHARSET utf8mb4;
+```
+
+```powershell
+mysql -u root -p fish_intel < fish_intel_mvp\schema.sql
+```
+
+## Thesis Sync: Useful Commands
+
+Run the Flask dashboard:
+
+```powershell
+.\.venv\Scripts\python.exe app.py
+```
+
+Run the full tests and coverage:
+
+```powershell
+.\.venv\Scripts\python.exe run_full_test.py
+```
+
+## Thesis Sync: Important Pages And Outputs
+
+- Home page: `http://127.0.0.1:5000/`
+- Salmon thesis analysis page: `http://127.0.0.1:5000/analysis/salmon?days=60`
+- Coverage report: `htmlcov/index.html`
+- PDF parse samples: `results/real_pdf_check/`
+
+Recommended screenshot URLs for thesis section 5.5:
+
+- Price trend chart:
+  `http://127.0.0.1:5000/analysis/salmon?days=60#trend`
+- Species and origin distribution:
+  `http://127.0.0.1:5000/analysis/salmon?days=30#distribution`
+- Online vs offline comparison:
+  `http://127.0.0.1:5000/analysis/salmon?days=30#compare`
+
+Optional single-platform trend filters:
+
+- JD only:
+  `http://127.0.0.1:5000/analysis/salmon?days=60&platform=jd#trend`
+- Taobao only:
+  `http://127.0.0.1:5000/analysis/salmon?days=60&platform=taobao#trend`
 水产情报采集 MVP。
 目标是把多来源采集统一成一套流程：`跑批 -> 入 MySQL -> 可回溯 -> 可去重`。
 
