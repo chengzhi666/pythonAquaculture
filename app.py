@@ -141,6 +141,163 @@ def index():
     return render_template("index.html")
 
 
+def _salmon_title_like_patterns() -> tuple[str, str, str, str]:
+    return (
+        "%三文鱼%",
+        "%帝王鲑%",
+        "%帝王三文鱼%",
+        "%虹鳟%",
+    )
+
+
+@app.route("/analysis/salmon")
+def salmon_analysis():
+    return render_template("salmon_analysis.html")
+
+
+@app.route("/api/analysis/salmon/trend")
+def salmon_price_trend():
+    """三文鱼相关商品的线上价格趋势，用于论文 5.5 时序图。"""
+    platform = request.args.get("platform", "").strip()
+    days = max(1, min(int(request.args.get("days", 60)), 365))
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    like1, like2, like3, like4 = _salmon_title_like_patterns()
+
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            sql = """
+                SELECT DATE(snapshot_time) AS date,
+                       platform,
+                       ROUND(AVG(price), 2) AS avg_price,
+                       COUNT(*) AS count
+                FROM product_snapshot
+                WHERE snapshot_time >= %s
+                  AND price IS NOT NULL
+                  AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
+            """
+            params = [since, like1, like2, like3, like4]
+            if platform:
+                sql += " AND platform = %s"
+                params.append(platform)
+            sql += " GROUP BY DATE(snapshot_time), platform ORDER BY date, platform"
+            cur.execute(sql, params)
+            rows = [_serialise_row(r) for r in cur.fetchall()]
+            for row in rows:
+                if row.get("date") is not None:
+                    row["date"] = str(row["date"])
+            return jsonify({"days": days, "platform": platform or "all", "data": rows})
+    finally:
+        conn.close()
+
+
+@app.route("/api/analysis/salmon/distribution")
+def salmon_distribution():
+    """三文鱼案例的品种分布 + 产地分布。"""
+    platform = request.args.get("platform", "").strip()
+    days = max(1, min(int(request.args.get("days", 30)), 365))
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    like1, like2, like3, like4 = _salmon_title_like_patterns()
+
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            species_sql = """
+                SELECT CASE
+                         WHEN title LIKE %s OR title LIKE %s THEN '帝王鲑'
+                         WHEN title LIKE %s THEN '虹鳟'
+                         ELSE '三文鱼'
+                       END AS species,
+                       COUNT(*) AS count
+                FROM product_snapshot
+                WHERE snapshot_time >= %s
+                  AND price IS NOT NULL
+                  AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
+            """
+            species_params = [like2, like3, like4, since, like1, like2, like3, like4]
+            if platform:
+                species_sql += " AND platform = %s"
+                species_params.append(platform)
+            species_sql += " GROUP BY species ORDER BY count DESC"
+            cur.execute(species_sql, species_params)
+            species_rows = [_serialise_row(r) for r in cur.fetchall()]
+
+            origin_sql = """
+                SELECT COALESCE(NULLIF(origin_standardized, ''), '未知') AS origin,
+                       COUNT(*) AS count
+                FROM product_snapshot
+                WHERE snapshot_time >= %s
+                  AND price IS NOT NULL
+                  AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
+            """
+            origin_params = [since, like1, like2, like3, like4]
+            if platform:
+                origin_sql += " AND platform = %s"
+                origin_params.append(platform)
+            origin_sql += " GROUP BY origin ORDER BY count DESC, origin LIMIT 12"
+            cur.execute(origin_sql, origin_params)
+            origin_rows = [_serialise_row(r) for r in cur.fetchall()]
+
+            return jsonify(
+                {
+                    "days": days,
+                    "platform": platform or "all",
+                    "species": species_rows,
+                    "origins": origin_rows,
+                }
+            )
+    finally:
+        conn.close()
+
+
+@app.route("/api/analysis/salmon/online-offline")
+def salmon_online_offline():
+    """线上零售与线下批发均价对比。"""
+    days = max(1, min(int(request.args.get("days", 30)), 365))
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    like1, like2, like3, like4 = _salmon_title_like_patterns()
+
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            online_sql = """
+                SELECT CASE
+                         WHEN platform = 'jd' THEN '京东线上'
+                         WHEN platform = 'taobao' THEN '淘宝线上'
+                         ELSE platform
+                       END AS channel,
+                       ROUND(AVG(price), 2) AS avg_price,
+                       COUNT(*) AS count
+                FROM product_snapshot
+                WHERE snapshot_time >= %s
+                  AND price IS NOT NULL
+                  AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
+                GROUP BY platform
+                ORDER BY avg_price DESC
+            """
+            cur.execute(online_sql, (since, like1, like2, like3, like4))
+            online_rows = [_serialise_row(r) for r in cur.fetchall()]
+
+            offline_sql = """
+                SELECT '线下批发(MOA)' AS channel,
+                       ROUND(AVG(price), 2) AS avg_price,
+                       COUNT(*) AS count
+                FROM offline_price_snapshot
+                WHERE snapshot_time >= %s
+                  AND price IS NOT NULL
+                  AND (product_name_raw LIKE %s OR product_type = 'salmon_generic')
+            """
+            cur.execute(offline_sql, (since, like1))
+            offline_row = _serialise_row(cur.fetchone() or {})
+
+            data = list(online_rows)
+            if offline_row.get("avg_price") is not None:
+                data.append(offline_row)
+            return jsonify({"days": days, "data": data})
+    finally:
+        conn.close()
+
+
 # ── 爬虫相关 ──────────────────────────────────────────────────────────
 
 @app.route("/api/crawl", methods=["POST"])

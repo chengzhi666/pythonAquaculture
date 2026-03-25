@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三文鱼案例分析</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+:root {
+  --bg: #f5f7fa;
+  --card: #ffffff;
+  --text: #223;
+  --muted: #667085;
+  --border: #e5e7eb;
+  --primary: #1565c0;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+.hero {
+  background: linear-gradient(135deg, #0f3d6e 0%, #1565c0 70%, #6aa9ff 100%);
+  color: #fff;
+  padding: 28px 36px;
+}
+.hero h1 {
+  margin: 0 0 8px;
+  font-size: 30px;
+}
+.hero p {
+  margin: 0;
+  opacity: .92;
+  line-height: 1.7;
+}
+.nav {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+.nav a {
+  color: #fff;
+  text-decoration: none;
+  padding: 8px 14px;
+  border: 1px solid rgba(255,255,255,.35);
+  border-radius: 999px;
+  background: rgba(255,255,255,.12);
+}
+.wrap {
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 24px;
+}
+.tip {
+  background: #fff8e1;
+  border: 1px solid #f6d48c;
+  color: #8a5a00;
+  padding: 14px 18px;
+  border-radius: 12px;
+  line-height: 1.7;
+  margin-bottom: 18px;
+}
+.section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 22px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, .05);
+}
+.section h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+.section p {
+  margin: 0 0 16px;
+  color: var(--muted);
+}
+.chart {
+  width: 100%;
+  min-height: 460px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 18px;
+}
+.meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.meta span {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+@media (max-width: 980px) {
+  .grid { grid-template-columns: 1fr; }
+  .hero { padding: 22px 18px; }
+  .wrap { padding: 14px; }
+}
+</style>
+</head>
+<body>
+  <div class="hero">
+    <h1>三文鱼案例分析截图页</h1>
+    <p>面向毕业论文 5.5 节，直接提供价格趋势、品种/产地分布、线上线下价格对比三类图表。</p>
+    <div class="nav">
+      <a href="#trend">价格趋势图</a>
+      <a href="#distribution">品种/产地分布图</a>
+      <a href="#compare">线上线下对比图</a>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="tip">
+      推荐截图参数：<code>?days=60</code>。如果你想只看某个平台，可在地址后追加 <code>&platform=jd</code> 或 <code>&platform=taobao</code>。
+      默认口径会自动筛选标题中包含“三文鱼 / 帝王鲑 / 帝王三文鱼 / 虹鳟”的商品，并把线下批发价单独纳入对比。
+    </div>
+
+    <section class="section" id="trend">
+      <h2>1. 价格趋势图</h2>
+      <p>展示近一段时间三文鱼相关商品在京东、淘宝两个线上渠道的均价变化，可用于说明系统对时序价格波动的监测能力。</p>
+      <div class="meta">
+        <span id="trendMetaDays"></span>
+        <span id="trendMetaPlatform"></span>
+      </div>
+      <div class="chart" id="trendChart"></div>
+    </section>
+
+    <section class="section" id="distribution">
+      <h2>2. 品种 / 产地分布图</h2>
+      <p>左侧为品种分布饼图，右侧为产地分布柱状图，适合放在“品种结构与来源结构分析”段落。</p>
+      <div class="grid">
+        <div class="chart" id="speciesChart"></div>
+        <div class="chart" id="originChart"></div>
+      </div>
+    </section>
+
+    <section class="section" id="compare">
+      <h2>3. 线上线下价格对比图</h2>
+      <p>将京东、淘宝零售价与 MOA 线下批发均价放在同一张柱状图中，突出 <code>offline_price_snapshot</code> 的实际价值。</p>
+      <div class="chart" id="compareChart"></div>
+    </section>
+  </div>
+
+<script>
+function getParams() {
+  const url = new URL(window.location.href);
+  return {
+    days: url.searchParams.get('days') || '60',
+    platform: url.searchParams.get('platform') || '',
+  };
+}
+
+async function getJson(path) {
+  const r = await fetch(path);
+  if (!r.ok) {
+    throw new Error(`${path} -> ${r.status}`);
+  }
+  return r.json();
+}
+
+function renderTrend(payload) {
+  const rows = payload.data || [];
+  const grouped = {};
+  for (const row of rows) {
+    const key = row.platform || 'unknown';
+    if (!grouped[key]) grouped[key] = {x: [], y: [], text: []};
+    grouped[key].x.push(row.date);
+    grouped[key].y.push(Number(row.avg_price));
+    grouped[key].text.push(`样本数: ${row.count}`);
+  }
+  const traces = Object.entries(grouped).map(([platform, data]) => ({
+    x: data.x,
+    y: data.y,
+    text: data.text,
+    mode: 'lines+markers',
+    type: 'scatter',
+    name: platform === 'jd' ? '京东' : platform === 'taobao' ? '淘宝' : platform,
+    line: {width: 4},
+    marker: {size: 10},
+    hovertemplate: '%{x}<br>%{fullData.name}均价: %{y} 元<br>%{text}<extra></extra>',
+  }));
+
+  Plotly.newPlot('trendChart', traces, {
+    title: '三文鱼相关商品价格趋势',
+    paper_bgcolor: '#fff',
+    plot_bgcolor: '#fff',
+    xaxis: {title: '日期'},
+    yaxis: {title: '均价（元）'},
+    legend: {orientation: 'h'},
+    margin: {l: 65, r: 30, t: 60, b: 55},
+  }, {displayModeBar: false, responsive: true});
+
+  document.getElementById('trendMetaDays').textContent = `时间窗口: 近 ${payload.days} 天`;
+  document.getElementById('trendMetaPlatform').textContent =
+    `平台口径: ${payload.platform === 'all' ? '京东 + 淘宝' : payload.platform}`;
+}
+
+function renderDistribution(payload) {
+  const species = payload.species || [];
+  const origins = payload.origins || [];
+
+  Plotly.newPlot('speciesChart', [{
+    type: 'pie',
+    labels: species.map(x => x.species),
+    values: species.map(x => Number(x.count)),
+    textinfo: 'label+percent',
+    hole: .28,
+  }], {
+    title: '品种分布',
+    margin: {l: 20, r: 20, t: 60, b: 20},
+  }, {displayModeBar: false, responsive: true});
+
+  Plotly.newPlot('originChart', [{
+    type: 'bar',
+    x: origins.map(x => x.origin),
+    y: origins.map(x => Number(x.count)),
+    marker: {color: '#1565c0'},
+    text: origins.map(x => x.count),
+    textposition: 'outside',
+  }], {
+    title: '产地分布（Top 12）',
+    xaxis: {title: '产地', tickangle: -30},
+    yaxis: {title: '样本数'},
+    margin: {l: 60, r: 20, t: 60, b: 130},
+  }, {displayModeBar: false, responsive: true});
+}
+
+function renderCompare(payload) {
+  const rows = payload.data || [];
+  Plotly.newPlot('compareChart', [{
+    type: 'bar',
+    x: rows.map(x => x.channel),
+    y: rows.map(x => Number(x.avg_price)),
+    text: rows.map(x => `样本 ${x.count}`),
+    textposition: 'outside',
+    marker: {
+      color: ['#0f766e', '#2563eb', '#d97706'],
+    },
+  }], {
+    title: '线上零售价与线下批发均价对比',
+    xaxis: {title: '渠道'},
+    yaxis: {title: '均价（元）'},
+    margin: {l: 60, r: 20, t: 60, b: 60},
+  }, {displayModeBar: false, responsive: true});
+}
+
+async function boot() {
+  const {days, platform} = getParams();
+  const qs = new URLSearchParams({days});
+  if (platform) qs.set('platform', platform);
+
+  const trend = await getJson(`/api/analysis/salmon/trend?${qs.toString()}`);
+  const distribution = await getJson(`/api/analysis/salmon/distribution?${qs.toString()}`);
+  const compare = await getJson(`/api/analysis/salmon/online-offline?days=${days}`);
+
+  renderTrend(trend);
+  renderDistribution(distribution);
+  renderCompare(compare);
+}
+
+boot().catch(err => {
+  document.getElementById('trendChart').innerHTML = `<div style="padding:24px;color:#b42318;">图表加载失败: ${err.message}</div>`;
+});
+</script>
+</body>
+</html>
