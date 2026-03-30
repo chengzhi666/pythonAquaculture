@@ -138,7 +138,7 @@ body {
 
     <section class="section" id="distribution">
       <h2>2. 品种 / 产地分布图</h2>
-      <p>左侧为品种分布饼图，右侧为产地分布柱状图，适合放在“品种结构与来源结构分析”段落。</p>
+      <p>左侧为品种分布饼图，右侧为去除“未知”后的产地 Top 6 横向条形图，更适合放在“品种结构与来源结构分析”段落。</p>
       <div class="grid">
         <div class="chart" id="speciesChart"></div>
         <div class="chart" id="originChart"></div>
@@ -223,16 +223,17 @@ function renderDistribution(payload) {
 
   Plotly.newPlot('originChart', [{
     type: 'bar',
-    x: origins.map(x => x.origin),
-    y: origins.map(x => Number(x.count)),
+    orientation: 'h',
+    x: origins.map(x => Number(x.count)),
+    y: origins.map(x => x.origin),
     marker: {color: '#1565c0'},
     text: origins.map(x => x.count),
     textposition: 'outside',
   }], {
-    title: '产地分布（Top 12）',
-    xaxis: {title: '产地', tickangle: -30},
-    yaxis: {title: '样本数'},
-    margin: {l: 60, r: 20, t: 60, b: 130},
+    title: `产地分布（去除未知，Top ${payload.origin_limit || origins.length}）`,
+    xaxis: {title: '样本数'},
+    yaxis: {title: '产地', autorange: 'reversed', automargin: true},
+    margin: {l: 180, r: 30, t: 60, b: 60},
   }, {displayModeBar: false, responsive: true});
 }
 

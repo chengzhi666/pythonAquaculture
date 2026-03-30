@@ -196,8 +196,10 @@ def salmon_distribution():
     """三文鱼案例的品种分布 + 产地分布。"""
     platform = request.args.get("platform", "").strip()
     days = max(1, min(int(request.args.get("days", 30)), 365))
+    origin_limit = max(3, min(int(request.args.get("origin_limit", 6)), 10))
     since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     like1, like2, like3, like4 = _salmon_title_like_patterns()
+    unknown_origin = "未知"
 
     conn = get_conn()
     try:
@@ -221,6 +223,34 @@ def salmon_distribution():
             species_sql += " GROUP BY species ORDER BY count DESC"
             cur.execute(species_sql, species_params)
             species_rows = [_serialise_row(r) for r in cur.fetchall()]
+            origin_sql = """
+                SELECT origin_standardized AS origin,
+                       COUNT(*) AS count
+                FROM product_snapshot
+                WHERE snapshot_time >= %s
+                  AND price IS NOT NULL
+                  AND origin_standardized IS NOT NULL
+                  AND origin_standardized != ''
+                  AND origin_standardized != %s
+                  AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
+            """
+            origin_params = [since, unknown_origin, like1, like2, like3, like4]
+            if platform:
+                origin_sql += " AND platform = %s"
+                origin_params.append(platform)
+            origin_sql += " GROUP BY origin ORDER BY count DESC, origin LIMIT %s"
+            origin_params.append(origin_limit)
+            cur.execute(origin_sql, origin_params)
+            origin_rows = [_serialise_row(r) for r in cur.fetchall()]
+            return jsonify(
+                {
+                    "days": days,
+                    "origin_limit": origin_limit,
+                    "platform": platform or "all",
+                    "species": species_rows,
+                    "origins": origin_rows,
+                }
+            )
 
             origin_sql = """
                 SELECT COALESCE(NULLIF(origin_standardized, ''), '未知') AS origin,
