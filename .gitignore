@@ -9,6 +9,7 @@ __pycache__/
 
 # Virtual environments
 .venv/
+.venv311/
 venv/
 env/
 
@@ -40,6 +41,9 @@ fish_intel_mvp/logs/
 chrome_data/
 .chrome-for-testing/
 fish_intel_mvp/jobs/.drivers/
+cnki_debug/
+results/
+test_pdfs/
 
 # Testing
 .pytest_cache/

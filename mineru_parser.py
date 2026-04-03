@@ -5,7 +5,7 @@ MinerU 深度版面解析管线
 用法：
     from mineru_parser import parse_pdf_with_mineru, evaluate_availability
 
-安装 MinerU 后替换 _call_mineru() 中的 stub 即可，其余逻辑不变：
+安装依赖：
     pip install magic-pdf[full] --extra-index-url https://wheels.myhloli.com
 """
 
@@ -46,7 +46,7 @@ class AvailabilityReport:
 
 
 # ---------------------------------------------------------------------------
-# MinerU 调用（stub → 替换为真实调用）
+# MinerU 调用
 # ---------------------------------------------------------------------------
 
 def _call_mineru(pdf_path: str) -> tuple[str, list[dict]]:
@@ -117,58 +117,6 @@ def _call_mineru(pdf_path: str) -> tuple[str, list[dict]]:
             raise
         return run_pipeline(formula_enable=False)
 
-    pdf_bytes = Path(pdf_path).read_bytes()
-    # 图片输出到 PDF 同目录下的 images/ 子目录
-    img_dir = str(Path(pdf_path).parent / "images")
-    image_writer = FileBasedDataWriter(img_dir)
-
-    ds = PymuDocDataset(pdf_bytes)
-    infer_result = ds.apply(
-        doc_analyze,
-        ocr=False,
-        lang=getattr(ds, "_lang", None),
-        layout_model="doclayout_yolo",
-        formula_enable=True,
-        table_enable=True,
-    )
-    # fast-langdetect may fail with newer NumPy; fall back to Chinese so markdown generation can continue.
-    from magic_pdf.dict2md import ocr_mkcontent
-    from magic_pdf.libs import language as language_mod
-    from magic_pdf.post_proc import para_split_v3
-
-    original_detect_lang = language_mod.detect_lang
-
-    def safe_detect_lang(text: str) -> str:
-        try:
-            return original_detect_lang(text)
-        except Exception:
-            return "zh"
-
-    language_mod.detect_lang = safe_detect_lang
-    ocr_mkcontent.detect_lang = safe_detect_lang
-    para_split_v3.detect_lang = safe_detect_lang
-    pipe_result = infer_result.pipe_txt_mode(
-        image_writer,
-        debug_mode=True,
-        lang=getattr(ds, "_lang", None),
-    )
-    md_content = pipe_result.get_markdown(Path(img_dir).name, drop_mode=DropMode.NONE)
-
-    # 从 middle json 中提取版面元素，供后处理与调试使用
-    layout_elements = []
-    try:
-        mid = json.loads(pipe_result.get_middle_json())
-        for page_info in mid.get("pdf_info", []):
-            for block in page_info.get("preproc_blocks", []):
-                layout_elements.append({
-                    "type": block.get("type", "unknown"),
-                    "text": block.get("text", ""),
-                })
-    except Exception:
-        pass
-
-    return md_content, layout_elements
-
 
 # ---------------------------------------------------------------------------
 # 4 项后处理规则
@@ -195,29 +143,6 @@ def fix_formula_regions(md: str) -> str:
     for pattern, repl in replacements.items():
         md = re.sub(pattern, repl, md)
     return md
-
-
-def _is_stub_pdf_path(pdf_path: str) -> bool:
-    name = Path(pdf_path).name.lower()
-    return name == "fake_paper.pdf" or name.startswith("stub_paper_")
-
-
-def _build_stub_parse_output(pdf_path: str) -> tuple[str, list[dict]]:
-    stub_md = "\n\n".join([
-        "页眉：水产学报 第2卷 第1期",
-        "三文鱼养殖研究表明，循环水养殖系统可以提升成活率和增重率。",
-        "图1 三文鱼价格趋势图",
-        "帝王鲑与虹鳟在市场定位和价格区间上存在明显差异。",
-        "该研究结果可直接用于水产养殖价格监测与智能分析系统构建。",
-    ])
-    layout_elements = [
-        {"type": "header", "text": "页眉：水产学报 第2卷 第1期"},
-        {"type": "paragraph", "text": "三文鱼养殖研究表明，循环水养殖系统可以提升成活率和增重率。"},
-        {"type": "caption", "text": "图1 三文鱼价格趋势图"},
-        {"type": "paragraph", "text": "帝王鲑与虹鳟在市场定位和价格区间上存在明显差异。"},
-    ]
-    return stub_md, layout_elements
-
 
 def merge_cross_page_tables(md: str) -> str:
     """
@@ -330,10 +255,11 @@ def parse_pdf_with_mineru(pdf_path: str, apply_postprocessing: bool = True) -> P
     """
     t0 = time.time()
     try:
-        if not Path(pdf_path).exists() and _is_stub_pdf_path(pdf_path):
-            raw_md, layout_elements = _build_stub_parse_output(pdf_path)
-        else:
-            raw_md, layout_elements = _call_mineru(pdf_path)
+        pdf = Path(pdf_path)
+        if not pdf.exists():
+            raise FileNotFoundError(f"PDF 文件不存在：{pdf}")
+
+        raw_md, layout_elements = _call_mineru(str(pdf))
         if apply_postprocessing:
             processed_md = _apply_postprocessing(raw_md)
         else:

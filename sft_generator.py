@@ -65,6 +65,9 @@ PROMPT_VARIANTS = {
         "请根据以下研究内容归纳核心观点、关键发现与结论。",
         "请阅读材料并总结其研究目标、主要方法和结论。",
         "请对以下内容进行摘要，概括研究重点和实际意义。",
+        "请以“研究问题-方法-结论”的结构，对以下材料进行摘要。",
+        "请从研究目标、关键结果和行业意义三个方面概括以下内容。",
+        "请将以下材料精简总结为一段，突出其核心发现和实践启示。",
     ],
     "application": [
         "请根据以下材料，说明该研究结论在水产养殖实际场景中的应用方式。",
@@ -115,6 +118,19 @@ DOMAIN_TERM_GROUPS = {
 
 CORE_DOMAIN_TERMS = sorted({term for terms in DOMAIN_TERM_GROUPS.values() for term in terms})
 NEGATION_HINTS = ("不涉及", "无关", "并非", "不是", "缺乏", "脱离")
+FORBIDDEN_FAKE_MARKERS = (
+    "stub_paper_",
+    "fake_paper",
+    "示例文档（STUB）",
+    "示例文档(STUB)",
+)
+
+
+def assert_real_source(label: str, value: str) -> None:
+    lowered = value.lower()
+    for marker in FORBIDDEN_FAKE_MARKERS:
+        if marker.lower() in lowered:
+            raise ValueError(f"{label} contains forbidden fake marker: {marker}")
 
 
 @dataclass
@@ -265,51 +281,69 @@ def extract_markdown_title(path: Path, text: str) -> str:
 
 
 def load_markdown_blocks(markdown_dirs: Sequence[Path]) -> list[ParsedBlock]:
+    if not markdown_dirs:
+        raise ValueError("At least one Markdown directory must be provided.")
+
     blocks: list[ParsedBlock] = []
+    markdown_files: list[Path] = []
     for markdown_dir in markdown_dirs:
+        markdown_dir = Path(markdown_dir)
         if not markdown_dir.exists():
-            continue
-        for md_path in sorted(markdown_dir.glob("**/*.md")):
-            text = normalize_text(read_text_with_fallback(md_path))
-            if not text:
-                continue
-            title = extract_markdown_title(md_path, text)
-            current_section = title
-            paragraph_lines: list[str] = []
+            raise FileNotFoundError(f"Markdown directory does not exist: {markdown_dir}")
+        if not markdown_dir.is_dir():
+            raise NotADirectoryError(f"Markdown path is not a directory: {markdown_dir}")
+        current_files = sorted(markdown_dir.glob("**/*.md"))
+        if not current_files:
+            raise FileNotFoundError(f"No Markdown files found under: {markdown_dir}")
+        markdown_files.extend(current_files)
 
-            def flush_paragraph() -> None:
-                nonlocal paragraph_lines, current_section
-                paragraph = normalize_text("\n".join(paragraph_lines))
-                paragraph_lines = []
-                if should_skip_markdown_paragraph(paragraph, current_section):
-                    return
-                keywords = extract_domain_terms(f"{title}\n{current_section}\n{paragraph}")
-                for idx, chunk in enumerate(chunk_text(paragraph)):
-                    block_id = stable_hash(f"{md_path}:{current_section}:{idx}:{chunk[:80]}")
-                    blocks.append(
-                        ParsedBlock(
-                            doc_id=block_id,
-                            title=title,
-                            section_title=current_section,
-                            content=chunk,
-                            source_path=str(md_path),
-                            source_type="mineru_markdown",
-                            keywords=keywords,
-                            metadata={"file_name": md_path.name},
-                        )
+    for md_path in markdown_files:
+        assert_real_source(f"Markdown file path {md_path}", str(md_path))
+        text = normalize_text(read_text_with_fallback(md_path))
+        if not text:
+            raise ValueError(f"Markdown file is empty: {md_path}")
+        assert_real_source(f"Markdown file content {md_path}", text)
+
+        title = extract_markdown_title(md_path, text)
+        current_section = title
+        paragraph_lines: list[str] = []
+
+        def flush_paragraph() -> None:
+            nonlocal paragraph_lines, current_section
+            paragraph = normalize_text("\n".join(paragraph_lines))
+            paragraph_lines = []
+            if should_skip_markdown_paragraph(paragraph, current_section):
+                return
+            keywords = extract_domain_terms(f"{title}\n{current_section}\n{paragraph}")
+            for idx, chunk in enumerate(chunk_text(paragraph)):
+                block_id = stable_hash(f"{md_path}:{current_section}:{idx}:{chunk[:80]}")
+                blocks.append(
+                    ParsedBlock(
+                        doc_id=block_id,
+                        title=title,
+                        section_title=current_section,
+                        content=chunk,
+                        source_path=str(md_path),
+                        source_type="mineru_markdown",
+                        keywords=keywords,
+                        metadata={"file_name": md_path.name},
                     )
+                )
 
-            for raw_line in text.splitlines():
-                line = raw_line.strip()
-                if line.startswith("#"):
-                    flush_paragraph()
-                    current_section = re.sub(r"^#+\s*", "", line).strip() or title
-                    continue
-                if not line:
-                    flush_paragraph()
-                    continue
-                paragraph_lines.append(line)
-            flush_paragraph()
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if line.startswith("#"):
+                flush_paragraph()
+                current_section = re.sub(r"^#+\s*", "", line).strip() or title
+                continue
+            if not line:
+                flush_paragraph()
+                continue
+            paragraph_lines.append(line)
+        flush_paragraph()
+
+    if not blocks:
+        raise ValueError("No valid Markdown blocks were extracted from the provided directories.")
     return blocks
 
 
@@ -342,16 +376,48 @@ def parse_cnki_tsv_row(parts: Sequence[str]) -> ParsedBlock | None:
 
 
 def load_cnki_abstract_blocks(cnki_paths: Sequence[Path]) -> list[ParsedBlock]:
+    if not cnki_paths:
+        raise ValueError("At least one CNKI TSV file must be provided.")
+
     blocks: list[ParsedBlock] = []
     for cnki_path in cnki_paths:
+        cnki_path = Path(cnki_path)
         if not cnki_path.exists():
-            continue
+            raise FileNotFoundError(f"CNKI TSV file does not exist: {cnki_path}")
+        if not cnki_path.is_file():
+            raise FileNotFoundError(f"CNKI TSV path is not a file: {cnki_path}")
         text = read_text_with_fallback(cnki_path)
+        assert_real_source(f"CNKI TSV content {cnki_path}", text)
+        valid_row_count = 0
         for line in text.splitlines():
             parts = line.rstrip("\n").split("\t")
             block = parse_cnki_tsv_row(parts)
-            if block is not None:
-                blocks.append(block)
+            if block is None:
+                continue
+            valid_row_count += 1
+            assert_real_source(f"CNKI abstract title {cnki_path}", block.title)
+            assert_real_source(f"CNKI abstract content {cnki_path}", block.content)
+            chunks = chunk_text(block.content, max_chars=300) or [block.content]
+            for idx, chunk in enumerate(chunks):
+                chunk_id = stable_hash(f"{block.doc_id}|chunk|{idx}|{chunk[:80]}")
+                section_title = "摘要" if len(chunks) == 1 else f"摘要片段{idx + 1}"
+                blocks.append(
+                    ParsedBlock(
+                        doc_id=chunk_id,
+                        title=block.title,
+                        section_title=section_title,
+                        content=chunk,
+                        source_path=block.source_path,
+                        source_type=block.source_type,
+                        keywords=block.keywords,
+                        metadata=block.metadata,
+                    )
+                )
+        if valid_row_count == 0:
+            continue
+
+    if not blocks:
+        raise ValueError("No CNKI abstract blocks were loaded from the provided TSV files.")
     return blocks
 
 
@@ -359,10 +425,16 @@ def load_parsed_docs(
     markdown_dirs: Sequence[str | Path] | None = None,
     cnki_paths: Sequence[str | Path] | None = None,
 ) -> list[ParsedBlock]:
-    markdown_dirs = markdown_dirs or [Path("results/markdown")]
-    cnki_paths = cnki_paths or sorted(Path("fish_intel_mvp").glob("CNKI_*.tsv"))
-    markdown_paths = [Path(p) for p in markdown_dirs]
-    cnki_file_paths = [Path(p) for p in cnki_paths]
+    markdown_paths = (
+        [Path("results/markdown")]
+        if markdown_dirs is None
+        else [Path(p) for p in markdown_dirs]
+    )
+    cnki_file_paths = (
+        sorted(Path("fish_intel_mvp").glob("CNKI_*.tsv"))
+        if cnki_paths is None
+        else [Path(p) for p in cnki_paths]
+    )
 
     blocks = load_markdown_blocks(markdown_paths)
     blocks.extend(load_cnki_abstract_blocks(cnki_file_paths))
@@ -382,7 +454,7 @@ def extract_key_sentences(block: ParsedBlock, desired: int = 3, offset: int = 0)
     return window
 
 
-def pick_focus_terms(block: ParsedBlock, limit: int = 4) -> list[str]:
+def pick_focus_terms(block: ParsedBlock, limit: int = 6) -> list[str]:
     ordered_terms: list[str] = []
     for source in (block.keywords, extract_domain_terms(block.content), extract_candidate_phrases(block.title), extract_candidate_phrases(block.content)):
         for item in source:
@@ -402,8 +474,18 @@ def ensure_length(text: str, minimum: int = 50) -> str:
     return text
 
 
-def build_context_input(block: ParsedBlock, max_chars: int = 900) -> str:
-    context = block.content[:max_chars].strip()
+def build_context_input(
+    block: ParsedBlock,
+    max_chars: int = 900,
+    variant: int = 0,
+    window_sentences: int = 2,
+) -> str:
+    sentences = split_sentences(block.content)
+    if len(sentences) > window_sentences:
+        start = variant % max(len(sentences) - window_sentences + 1, 1)
+        context = "".join(sentences[start:start + window_sentences]).strip()
+    else:
+        context = block.content[:max_chars].strip()
     return "\n".join([
         f"文献标题：{block.title}",
         f"章节位置：{block.section_title}",
@@ -497,9 +579,9 @@ def inject_cot(
 
 def build_sample(block: ParsedBlock, template_type: str, variant: int, force_summary_cot: bool = False) -> SftSample:
     focus_terms = pick_focus_terms(block)
-    focus = focus_terms[0]
-    left = focus_terms[0]
-    right = focus_terms[1] if len(focus_terms) > 1 else f"{focus}的相关因素"
+    focus = focus_terms[variant % len(focus_terms)]
+    left = focus_terms[variant % len(focus_terms)]
+    right = focus_terms[(variant + 1) % len(focus_terms)] if len(focus_terms) > 1 else f"{focus}的相关因素"
     prompt_templates = PROMPT_VARIANTS[template_type]
     prompt_template = prompt_templates[variant % len(prompt_templates)]
 
@@ -527,7 +609,7 @@ def build_sample(block: ParsedBlock, template_type: str, variant: int, force_sum
         forced=force_summary_cot if template_type == "summary" else None,
     )
 
-    input_text = build_context_input(block)
+    input_text = build_context_input(block, variant=variant)
     sample_id = stable_hash(f"{block.doc_id}|{template_type}|{variant}|{instruction}")
     domain_terms = extract_domain_terms(f"{block.title}\n{block.content}\n{output}")
     return SftSample(
@@ -555,15 +637,15 @@ def is_block_suitable(block: ParsedBlock, template_type: str) -> bool:
     has_numbers = bool(re.search(r"\d", block.content))
     focus_terms = pick_focus_terms(block)
     if template_type == "definition":
-        return bool(focus_terms) and length >= 80
+        return bool(focus_terms) and length >= 60
     if template_type == "reasoning":
-        return length >= 140
+        return length >= 100
     if template_type == "comparison":
         return len(focus_terms) >= 2 or "对比" in block.content or "比较" in block.content
     if template_type == "summary":
-        return length >= 120
+        return length >= 80
     if template_type == "application":
-        return has_numbers or length >= 160
+        return has_numbers or length >= 100
     return True
 
 

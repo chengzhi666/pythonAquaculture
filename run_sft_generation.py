@@ -24,6 +24,10 @@ from sft_generator import (
     samples_to_rows,
 )
 
+DEFAULT_MARKDOWN_DIR = Path("results/markdown")
+DEFAULT_CNKI_GLOB = "CNKI_*.tsv"
+DEFAULT_OUTPUT_DIR = Path("results/sft_dataset_real")
+
 
 def build_template_distribution_rows(total_samples: int, template_distribution: dict[str, int]) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
@@ -48,18 +52,18 @@ def parse_args() -> argparse.Namespace:
         "--markdown-dir",
         action="append",
         default=[],
-        help="Markdown directory produced by MinerU. Can be passed multiple times.",
+        help=f"Markdown directory produced by MinerU. Defaults to {DEFAULT_MARKDOWN_DIR}. Can be passed multiple times.",
     )
     parser.add_argument(
         "--cnki-path",
         action="append",
         default=[],
-        help="CNKI TSV path. Can be passed multiple times.",
+        help=f"CNKI TSV path. Defaults to fish_intel_mvp/{DEFAULT_CNKI_GLOB}. Can be passed multiple times.",
     )
     parser.add_argument(
         "--output-dir",
-        default="results/sft_generation",
-        help="Output directory for dataset and reports.",
+        default=str(DEFAULT_OUTPUT_DIR),
+        help=f"Output directory for dataset and reports. Default: {DEFAULT_OUTPUT_DIR}",
     )
     parser.add_argument(
         "--total-samples",
@@ -70,16 +74,25 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def resolve_input_paths(args: argparse.Namespace) -> tuple[list[Path], list[Path]]:
+    markdown_dirs = [Path(path) for path in args.markdown_dir] if args.markdown_dir else [DEFAULT_MARKDOWN_DIR]
+    cnki_paths = [Path(path) for path in args.cnki_path] if args.cnki_path else sorted(Path("fish_intel_mvp").glob(DEFAULT_CNKI_GLOB))
+
+    if not markdown_dirs:
+        raise SystemExit("No Markdown directories were provided.")
+    if not cnki_paths:
+        raise SystemExit("No CNKI TSV files were found. Please provide --cnki-path explicitly.")
+
+    return markdown_dirs, cnki_paths
+
+
 def main() -> None:
     args = parse_args()
-    markdown_dirs = [Path(path) for path in args.markdown_dir] if args.markdown_dir else [Path("results/markdown")]
-    cnki_paths = [Path(path) for path in args.cnki_path] if args.cnki_path else sorted(Path("fish_intel_mvp").glob("CNKI_*.tsv"))
+    markdown_dirs, cnki_paths = resolve_input_paths(args)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     blocks = load_parsed_docs(markdown_dirs=markdown_dirs, cnki_paths=cnki_paths)
-    if not blocks:
-        raise SystemExit("No parsed documents found. Please provide Markdown output and/or CNKI TSV files.")
 
     template_counts = build_target_template_counts(args.total_samples)
     samples, report = generate_sft_dataset(blocks, template_counts=template_counts)
@@ -108,13 +121,13 @@ def main() -> None:
     )
 
     source_summary = {
-        "markdown_dirs": [str(path) for path in markdown_dirs],
-        "cnki_paths": [str(path) for path in cnki_paths],
+        "markdown_dirs": [str(path.resolve()) for path in markdown_dirs],
+        "cnki_paths": [str(path.resolve()) for path in cnki_paths],
         "block_count": len(blocks),
         "requested_total_samples": args.total_samples,
         "actual_total_samples": len(samples),
-        "jsonl_path": str(dataset_jsonl),
-        "sharegpt_path": str(dataset_sharegpt),
+        "jsonl_path": str(dataset_jsonl.resolve()),
+        "sharegpt_path": str(dataset_sharegpt.resolve()),
     }
     (output_dir / "source_summary.json").write_text(
         json.dumps(source_summary, ensure_ascii=False, indent=2),

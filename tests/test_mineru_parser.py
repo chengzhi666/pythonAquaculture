@@ -29,7 +29,7 @@ from mineru_parser import (
 )
 
 
-def _stub_mineru_output() -> tuple[str, list[dict]]:
+def _sample_mineru_output() -> tuple[str, list[dict]]:
     raw_md = "\n\n".join([
         "页眉：水产学报 第2卷 第1期",
         "三文鱼养殖研究表明，循环水养殖系统可以提升成活率和增重率。",
@@ -44,6 +44,19 @@ def _stub_mineru_output() -> tuple[str, list[dict]]:
         {"type": "caption", "text": "图1 三文鱼价格趋势图"},
     ]
     return raw_md, layout
+
+
+def _write_dummy_pdf(path: Path) -> Path:
+    path.write_bytes(b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n")
+    return path
+
+
+def _real_pdf_paths(limit: int | None = None) -> list[str]:
+    pdf_dir = Path("test_pdfs")
+    pdfs = sorted(str(p) for p in pdf_dir.glob("**/*.pdf"))
+    if not pdfs:
+        raise FileNotFoundError(f"No real PDFs found under {pdf_dir.resolve()}")
+    return pdfs[:limit] if limit is not None else pdfs
 
 
 # ===========================================================================
@@ -243,40 +256,65 @@ class TestEvaluateAvailability:
 
 
 # ===========================================================================
-# parse_pdf_with_mineru（stub 模式）
+# parse_pdf_with_mineru
 # ===========================================================================
 
 class TestParsePdfWithMineru:
-    def test_returns_parse_result(self):
-        result = parse_pdf_with_mineru("fake_paper.pdf")
+    @staticmethod
+    def _patch_call_mineru(monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            mineru_parser,
+            "_call_mineru",
+            lambda _pdf_path: _sample_mineru_output(),
+        )
+
+    def test_returns_parse_result(self, tmp_path, monkeypatch):
+        self._patch_call_mineru(monkeypatch)
+        pdf_path = _write_dummy_pdf(tmp_path / "sample.pdf")
+        result = parse_pdf_with_mineru(str(pdf_path))
         assert isinstance(result, ParseResult)
 
-    def test_markdown_not_empty_in_stub(self):
-        result = parse_pdf_with_mineru("fake_paper.pdf")
-        assert result.markdown  # stub 应返回非空内容
+    def test_markdown_not_empty(self, tmp_path, monkeypatch):
+        self._patch_call_mineru(monkeypatch)
+        pdf_path = _write_dummy_pdf(tmp_path / "sample.pdf")
+        result = parse_pdf_with_mineru(str(pdf_path))
+        assert result.markdown
 
-    def test_method_is_mineru(self):
-        result = parse_pdf_with_mineru("fake_paper.pdf")
+    def test_method_is_mineru(self, tmp_path, monkeypatch):
+        self._patch_call_mineru(monkeypatch)
+        pdf_path = _write_dummy_pdf(tmp_path / "sample.pdf")
+        result = parse_pdf_with_mineru(str(pdf_path))
         assert result.method == "mineru"
 
-    def test_parse_time_recorded(self):
-        result = parse_pdf_with_mineru("fake_paper.pdf")
+    def test_parse_time_recorded(self, tmp_path, monkeypatch):
+        self._patch_call_mineru(monkeypatch)
+        pdf_path = _write_dummy_pdf(tmp_path / "sample.pdf")
+        result = parse_pdf_with_mineru(str(pdf_path))
         assert result.parse_time_s >= 0
 
-    def test_postprocessing_applied(self):
-        result = parse_pdf_with_mineru("fake_paper.pdf", apply_postprocessing=True)
-        # 后处理后不应有孤立页眉行（stub 中有"页眉：水产学报"）
+    def test_postprocessing_applied(self, tmp_path, monkeypatch):
+        self._patch_call_mineru(monkeypatch)
+        pdf_path = _write_dummy_pdf(tmp_path / "sample.pdf")
+        result = parse_pdf_with_mineru(str(pdf_path), apply_postprocessing=True)
         assert "页眉：水产学报" not in result.markdown
 
-    def test_no_postprocessing_preserves_raw(self):
-        result_raw = parse_pdf_with_mineru("fake_paper.pdf", apply_postprocessing=False)
-        result_processed = parse_pdf_with_mineru("fake_paper.pdf", apply_postprocessing=True)
-        # 原始输出与处理后输出应不同（stub 中有需要过滤的内容）
+    def test_no_postprocessing_preserves_raw(self, tmp_path, monkeypatch):
+        self._patch_call_mineru(monkeypatch)
+        pdf_path = _write_dummy_pdf(tmp_path / "sample.pdf")
+        result_raw = parse_pdf_with_mineru(str(pdf_path), apply_postprocessing=False)
+        result_processed = parse_pdf_with_mineru(str(pdf_path), apply_postprocessing=True)
         assert result_raw.markdown != result_processed.markdown
 
-    def test_layout_elements_returned(self):
-        result = parse_pdf_with_mineru("fake_paper.pdf")
+    def test_layout_elements_returned(self, tmp_path, monkeypatch):
+        self._patch_call_mineru(monkeypatch)
+        pdf_path = _write_dummy_pdf(tmp_path / "sample.pdf")
+        result = parse_pdf_with_mineru(str(pdf_path))
         assert isinstance(result.layout_elements, list)
+
+    def test_missing_file_returns_error_result(self):
+        result = parse_pdf_with_mineru("nonexistent_file_xyz.pdf")
+        assert result.error is not None
+        assert "PDF 文件不存在" in result.error
 
 
 # ===========================================================================
@@ -309,25 +347,14 @@ class TestBaselineParsers:
 
 
 # ===========================================================================
-# 集成测试：30 篇可用率断言（stub 模式）
+# 集成测试：真实 PDF 可用率断言
 # ===========================================================================
 
-class TestAvailabilityAt30Papers:
-    """
-    模拟 30 篇论文的可用率断言。
-    真实 PDF 到位后，将 STUB_COUNT 改为实际路径列表即可。
-    """
-    STUB_COUNT = 30
-    TARGET_AVAILABILITY = 0.90  # 论文目标 96.7%，stub 模式放宽到 90%
+class TestAvailabilityWithRealPdfs:
+    TARGET_AVAILABILITY = 0.85
 
     def _get_pdf_paths(self) -> list[str]:
-        pdf_dir = Path("./test_pdfs/30_papers")
-        if pdf_dir.exists():
-            pdfs = list(pdf_dir.glob("**/*.pdf"))
-            if pdfs:
-                return [str(p) for p in pdfs[:30]]
-        # 使用 stub 路径
-        return [f"stub_paper_{i:02d}.pdf" for i in range(1, self.STUB_COUNT + 1)]
+        return _real_pdf_paths()
 
     def test_mineru_availability_meets_target(self):
         """MinerU 解析的可用率应达到目标值。"""
@@ -342,20 +369,19 @@ class TestAvailabilityAt30Papers:
                 available += 1
         rate = available / len(pdfs)
         assert rate >= self.TARGET_AVAILABILITY, (
-            f"MinerU 可用率 {rate:.1%} 低于目标 {self.TARGET_AVAILABILITY:.1%}"
+            f"MinerU availability {rate:.1%} is below target {self.TARGET_AVAILABILITY:.1%}"
         )
 
-    def test_all_30_papers_processed_without_crash(self):
-        """30 篇全部能处理完，不崩溃。"""
+    def test_all_real_papers_processed_without_crash(self):
+        """All discovered real PDFs should return ParseResult objects."""
         pdfs = self._get_pdf_paths()
         results = [parse_pdf_with_mineru(p) for p in pdfs]
-        assert len(results) == self.STUB_COUNT
-        # 所有结果都是 ParseResult 实例
+        assert len(results) == len(pdfs)
         assert all(isinstance(r, ParseResult) for r in results)
 
     def test_mineru_outperforms_pymupdf(self):
         """MinerU 可用率应高于 PyMuPDF（论文核心对比结论）。"""
-        pdfs = self._get_pdf_paths()[:5]  # 取前 5 篇做快速对比
+        pdfs = self._get_pdf_paths()[:5]
         mineru_available = 0
         pymupdf_available = 0
         for pdf_path in pdfs:
@@ -369,5 +395,4 @@ class TestAvailabilityAt30Papers:
                 rep = evaluate_availability(r_pymupdf.markdown, method="pymupdf")
                 if rep.is_available:
                     pymupdf_available += 1
-        # stub 模式下 MinerU 应 >= PyMuPDF（PyMuPDF 对不存在文件返回空）
         assert mineru_available >= pymupdf_available

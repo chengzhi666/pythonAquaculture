@@ -91,6 +91,20 @@ Run the full tests and coverage:
 .\.venv\Scripts\python.exe run_full_test.py
 ```
 
+Optional CNKI fulltext helper for thesis artifacts:
+
+```powershell
+.\.venv\Scripts\python.exe fish_intel_mvp\jobs\download_cnki_fulltext.py --theme "<cnki-theme>" --max-papers 5
+```
+
+This helper is separate from `python fish_intel_mvp\run_one.py cnki`.
+Use it when you need real CNKI PDF or HTML files on disk for MinerU experiments.
+It opens a browser for manual login/captcha handling and saves outputs to:
+
+- `data/cnki/pdfs/<theme>/`
+- `data/cnki/fulltexts/<theme>/`
+- `data/cnki/debug/`
+
 ## Thesis Sync: Important Pages And Outputs
 
 - Home page: `http://127.0.0.1:5000/`

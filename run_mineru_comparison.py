@@ -4,7 +4,7 @@ MinerU vs Baseline 对比实验脚本
 
 用法：
     python run_mineru_comparison.py
-    python run_mineru_comparison.py --pdf-dir ./test_pdfs/30_papers --output ./results
+    python run_mineru_comparison.py --pdf-dir ./test_pdfs --output ./results
 
 输出：
     results/comparison_table.csv   — 逐篇对比数据（供论文表 5-x）
@@ -33,7 +33,10 @@ from mineru_parser import (
     evaluate_availability,
 )
 
-METHODS = ["mineru", "pymupdf", "pdfplumber", "cnki_txt"]
+DEFAULT_PDF_DIR = Path(
+    r"C:\Users\qiaoruo\PycharmProjects\pythonAquaculture\test_pdfs"
+)
+METHODS = ["mineru_raw", "mineru_enhanced", "pymupdf", "pdfplumber", "cnki_txt"]
 AVAILABILITY_THRESHOLD = 0.85
 
 
@@ -43,11 +46,14 @@ AVAILABILITY_THRESHOLD = 0.85
 
 def discover_pdfs(pdf_dir: Path) -> list[Path]:
     """递归查找目录下所有 PDF 文件。"""
+    if not pdf_dir.exists():
+        raise FileNotFoundError(f"PDF 目录不存在：{pdf_dir}")
+    if not pdf_dir.is_dir():
+        raise NotADirectoryError(f"PDF 路径不是目录：{pdf_dir}")
+
     pdfs = sorted(pdf_dir.glob("**/*.pdf"))
     if not pdfs:
-        # 如果没有真实 PDF，生成 30 个占位路径用于演示
-        print(f"[WARN] {pdf_dir} 中未找到 PDF，使用占位路径（STUB 模式）")
-        pdfs = [Path(f"stub_paper_{i:02d}.pdf") for i in range(1, 31)]
+        raise RuntimeError(f"PDF 目录中未找到任何 .pdf 文件：{pdf_dir}")
     return pdfs
 
 
@@ -65,25 +71,29 @@ def find_cnki_txt(pdf_path: Path, cnki_dir: Path) -> Path | None:
 def compare_one(
     pdf_path: Path,
     cnki_dir: Path | None = None,
-) -> list[dict]:
-    """对单篇 PDF 运行所有方法，返回各方法的评估结果行。"""
+) -> tuple[list[dict], ParseResult | None]:
+    """对单篇 PDF 运行所有方法，返回 (评估结果行列表, 增强版MinerU结果)。"""
     rows = []
     pdf_str = str(pdf_path)
 
-    parsers = {
-        "mineru": lambda: parse_pdf_with_mineru(pdf_str),
-        "pymupdf": lambda: parse_with_pymupdf(pdf_str),
-        "pdfplumber": lambda: parse_with_pdfplumber(pdf_str),
-    }
+    # MinerU 只调一次底层解析，通过开关得到 raw / enhanced 两份结果
+    mineru_raw = parse_pdf_with_mineru(pdf_str, apply_postprocessing=False)
+    mineru_enhanced = parse_pdf_with_mineru(pdf_str, apply_postprocessing=True)
+
+    parsers: list[tuple[str, ParseResult]] = [
+        ("mineru_raw", mineru_raw),
+        ("mineru_enhanced", mineru_enhanced),
+        ("pymupdf", parse_with_pymupdf(pdf_str)),
+        ("pdfplumber", parse_with_pdfplumber(pdf_str)),
+    ]
 
     # CNKI TXT（如果有对应文件）
     if cnki_dir:
         txt_path = find_cnki_txt(pdf_path, cnki_dir)
         if txt_path:
-            parsers["cnki_txt"] = lambda p=txt_path: parse_cnki_txt(str(p))
+            parsers.append(("cnki_txt", parse_cnki_txt(str(txt_path))))
 
-    for method, parser_fn in parsers.items():
-        result: ParseResult = parser_fn()
+    for method, result in parsers:
         if result.error:
             print(f"  [{method}] ERROR: {result.error}")
             report = AvailabilityReport(
@@ -113,7 +123,8 @@ def compare_one(
             "error": result.error or "",
         })
 
-    return rows
+    enhanced_ok = mineru_enhanced if not mineru_enhanced.error else None
+    return rows, enhanced_ok
 
 
 # ---------------------------------------------------------------------------
@@ -160,22 +171,26 @@ def compute_summary(all_rows: list[dict]) -> dict:
 
 def print_summary_table(summary: dict) -> None:
     """打印对比表格（论文 5.3 节格式）。"""
-    print("\n" + "=" * 70)
+    print("\n" + "=" * 80)
     print("表 5-x  各方法全文解析可用率对比")
-    print("=" * 70)
-    header = f"{'方法':<15} {'篇数':>6} {'可用篇数':>8} {'可用率':>8} {'噪声率':>8} {'平均耗时(s)':>12}"
+    print("=" * 80)
+    header = f"{'方法':<18} {'篇数':>6} {'可用篇数':>8} {'可用率':>8} {'噪声率':>8} {'耗时(s)':>10} {'vs原始MinerU':>14}"
     print(header)
-    print("-" * 70)
+    print("-" * 80)
+    raw_rate = summary.get("mineru_raw", {}).get("availability_rate", 0)
     for method, stats in summary.items():
+        delta = stats['availability_rate'] - raw_rate
+        delta_str = f"+{delta:.1%}" if delta > 0 else f"{delta:.1%}" if delta < 0 else "基线"
         print(
-            f"{method:<15} "
+            f"{method:<18} "
             f"{stats['total_papers']:>6} "
             f"{stats['available_papers']:>8} "
             f"{stats['availability_rate']:>8.1%} "
             f"{stats['avg_noise_rate']:>8.1%} "
-            f"{stats['avg_parse_time_s']:>12.3f}"
+            f"{stats['avg_parse_time_s']:>10.3f} "
+            f"{delta_str:>14}"
         )
-    print("=" * 70)
+    print("=" * 80)
 
 
 # ---------------------------------------------------------------------------
@@ -186,8 +201,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="MinerU vs Baseline 对比实验")
     parser.add_argument(
         "--pdf-dir",
-        default="./test_pdfs/30_papers",
-        help="30 篇测试 PDF 所在目录（默认 ./test_pdfs/30_papers）",
+        default=str(DEFAULT_PDF_DIR),
+        help=f"测试 PDF 所在目录（默认 {DEFAULT_PDF_DIR}）",
     )
     parser.add_argument(
         "--cnki-dir",
@@ -201,7 +216,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    pdf_dir = Path(args.pdf_dir)
+    pdf_dir = Path(args.pdf_dir).expanduser().resolve()
     cnki_dir = Path(args.cnki_dir) if Path(args.cnki_dir).exists() else None
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -213,13 +228,12 @@ def main() -> None:
 
     for i, pdf_path in enumerate(pdfs, 1):
         print(f"[{i:02d}/{len(pdfs)}] {pdf_path.name}")
-        rows = compare_one(pdf_path, cnki_dir)
+        rows, enhanced_result = compare_one(pdf_path, cnki_dir)
         all_rows.extend(rows)
 
-        # 保存 MinerU 的 Markdown 输出（供 SFT 使用）
-        mineru_result = parse_pdf_with_mineru(str(pdf_path))
-        if not mineru_result.error:
-            save_markdown(pdf_path, mineru_result, output_dir)
+        # 保存增强版 MinerU 的 Markdown 输出（供 SFT 使用）
+        if enhanced_result is not None:
+            save_markdown(pdf_path, enhanced_result, output_dir)
 
     # 保存逐篇 CSV
     csv_path = output_dir / "comparison_table.csv"

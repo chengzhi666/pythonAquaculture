@@ -5,6 +5,8 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sft_generator import (
@@ -63,6 +65,37 @@ def test_load_parsed_docs_reads_markdown_and_cnki(tmp_path: Path) -> None:
     assert {block.source_type for block in blocks} == {"mineru_markdown", "cnki_abstract"}
 
 
+def test_load_parsed_docs_requires_real_markdown_input(tmp_path: Path) -> None:
+    cnki_path = tmp_path / "CNKI_only.tsv"
+    cnki_path.write_text(
+        "1\t三文鱼价格趋势研究\t张三\t某研究院\t2026-01-01\t水产学报\tCNKI\t三文鱼;价格;市场\t"
+        "本文分析三文鱼市场价格波动与进口供应之间的关系，并讨论零售价格变化。\thttps://example.com\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Markdown directory"):
+        load_parsed_docs(markdown_dirs=[], cnki_paths=[cnki_path])
+
+
+def test_load_parsed_docs_rejects_fake_markdown_marker(tmp_path: Path) -> None:
+    markdown_dir = tmp_path / "markdown"
+    markdown_dir.mkdir()
+    (markdown_dir / "stub_paper_01.md").write_text(
+        "# 示例文档（STUB）\n\n这是一个不应该被加载的占位文件。",
+        encoding="utf-8",
+    )
+
+    cnki_path = tmp_path / "CNKI_real.tsv"
+    cnki_path.write_text(
+        "1\t三文鱼价格趋势研究\t张三\t某研究院\t2026-01-01\t水产学报\tCNKI\t三文鱼;价格;市场\t"
+        "本文分析三文鱼市场价格波动与进口供应之间的关系，并讨论零售价格变化。\thttps://example.com\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="forbidden fake marker"):
+        load_parsed_docs(markdown_dirs=[markdown_dir], cnki_paths=[cnki_path])
+
+
 def test_inject_cot_for_reasoning_has_required_markers() -> None:
     output, injected, strategy = inject_cot(
         "三文鱼养殖成效受水温和溶解氧共同影响。",
@@ -103,6 +136,23 @@ def test_generate_sft_dataset_matches_requested_counts() -> None:
     assert len(samples) == 10
     assert Counter(sample.template_type for sample in samples) == target_counts
     assert report.total_samples_after_filter == 10
+
+
+def test_build_sample_variant_changes_context_or_focus() -> None:
+    block = make_block(
+        content=(
+            "三文鱼循环水养殖系统需要稳定控制水温和溶解氧。"
+            "高密度养殖条件下，饲料系数和成活率会随水质波动变化。"
+            "研究还比较了不同养殖密度对生长性能和应激水平的影响。"
+            "结果表明精准水质调控有助于降低饲料系数并提升成活率。"
+            "进一步分析发现，不同管理策略对应的市场供应稳定性也存在差异。"
+        ),
+    )
+
+    sample_0 = build_sample(block, template_type="reasoning", variant=0)
+    sample_1 = build_sample(block, template_type="reasoning", variant=1)
+
+    assert sample_0.input != sample_1.input or sample_0.instruction != sample_1.instruction
 
 
 def test_quality_filter_rejects_duplicate_and_domain_irrelevant() -> None:

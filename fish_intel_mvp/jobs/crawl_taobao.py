@@ -4,9 +4,10 @@ import os
 import re
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Tuple
 from urllib.parse import quote
 
 import requests
@@ -102,6 +103,28 @@ BASE_EP_PARAMS: dict[str, Any] = {
 
 class TokenExpiredError(RuntimeError):
     """Raised when Taobao API tells us `_m_h5_tk` is expired."""
+
+
+@dataclass
+class HealStats:
+    """三级凭证自愈消融实验统计（对应论文 5.2.4 节消融表）。"""
+    pages_attempted: int = 0
+    pages_succeeded: int = 0
+    token_expired_count: int = 0
+    level1_attempts: int = 0     # 静默刷新尝试
+    level1_recovered: int = 0    # 静默刷新成功
+    level2_attempts: int = 0     # 浏览器重建尝试
+    level2_recovered: int = 0    # 浏览器重建成功
+    level3_fused: int = 0        # 熔断跳过
+
+    @property
+    def page_success_rate(self) -> float:
+        return self.pages_succeeded / self.pages_attempted if self.pages_attempted else 0.0
+
+    def to_dict(self) -> dict:
+        d = {k: v for k, v in self.__dict__.items()}
+        d["page_success_rate"] = round(self.page_success_rate, 4)
+        return d
 
 
 def _is_true(raw: str) -> bool:
@@ -437,6 +460,14 @@ def run(
     user_agent = os.getenv("TAOBAO_USER_AGENT", DEFAULT_USER_AGENT).strip() or DEFAULT_USER_AGENT
     raw_text_max_chars = max(0, int(os.getenv("TAOBAO_RAW_TEXT_MAX_CHARS", "4000")))
 
+    # ---- 消融实验：通过 TAOBAO_HEAL_LEVEL 控制启用哪几级自愈 ----
+    # 0 = 无自愈（Token 过期即放弃）
+    # 1 = 仅静默刷新
+    # 2 = 静默刷新 + 浏览器重建
+    # 3 = 全部三级（默认，完整系统）
+    heal_level = max(0, min(3, int(os.getenv("TAOBAO_HEAL_LEVEL", "3"))))
+    heal = HealStats()
+
     my_cna = _extract_cookie_value(cookie, "cna")
     snapshot_time = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     session = _build_session(cookie=cookie, user_agent=user_agent)
@@ -451,6 +482,7 @@ def run(
                 LOGGER.info("taobao reached max_items=%s", max_items)
                 return written
 
+            heal.pages_attempted += 1
             for attempt in range(2):
                 try:
                     products, raw_text = _fetch_page(
@@ -467,15 +499,23 @@ def run(
                     )
                     break
                 except TokenExpiredError as exc:
-                    refreshed = _extract_token_from_cookie_value(
-                        _cookie_dict_from_jar(session).get("_m_h5_tk", "")
-                    )
-                    if refreshed and refreshed != token and attempt == 0:
-                        token = refreshed
-                        LOGGER.info("taobao token refreshed, retry current page")
-                        continue
+                    heal.token_expired_count += 1
 
-                    if not browser_refreshed_once:
+                    # ---- Level 1: 静默 Token 刷新 ----
+                    if heal_level >= 1:
+                        heal.level1_attempts += 1
+                        refreshed = _extract_token_from_cookie_value(
+                            _cookie_dict_from_jar(session).get("_m_h5_tk", "")
+                        )
+                        if refreshed and refreshed != token and attempt == 0:
+                            token = refreshed
+                            heal.level1_recovered += 1
+                            LOGGER.info("taobao token refreshed (L1), retry current page")
+                            continue
+
+                    # ---- Level 2: 浏览器会话重建 ----
+                    if heal_level >= 2 and not browser_refreshed_once:
+                        heal.level2_attempts += 1
                         new_cookie = _try_refresh_cookie("token_expired")
                         browser_refreshed_once = True
                         if new_cookie:
@@ -483,13 +523,17 @@ def run(
                             token = _extract_token_from_cookie(cookie) or token
                             my_cna = _extract_cookie_value(cookie, "cna")
                             session = _build_session(cookie=cookie, user_agent=user_agent)
-                            LOGGER.info("taobao cookie refreshed via browser, retry current page")
+                            heal.level2_recovered += 1
+                            LOGGER.info("taobao cookie refreshed via browser (L2), retry current page")
                             continue
 
+                    # ---- Level 3: 熔断跳过（不抛异常，跳到下一页） ----
+                    heal.level3_fused += 1
                     LOGGER.warning(
-                        "taobao page failed: keyword=%s page=%s err=%s",
+                        "taobao page fused (L3): keyword=%s page=%s heal_level=%s err=%s",
                         keyword,
                         page,
+                        heal_level,
                         exc,
                     )
                     products, raw_text = [], ""
@@ -505,6 +549,7 @@ def run(
                 LOGGER.info("taobao empty page: keyword=%s page=%s", keyword, page)
                 break
 
+            heal.pages_succeeded += 1
             LOGGER.info(
                 "taobao page parsed: keyword=%s page=%s items=%s", keyword, page, len(products)
             )
@@ -587,6 +632,11 @@ def run(
             if sleep_seconds > 0:
                 time.sleep(sleep_seconds)
 
+    LOGGER.info(
+        "taobao heal_stats: level=%s %s",
+        heal_level,
+        json.dumps(heal.to_dict(), ensure_ascii=False),
+    )
     return written
 
 
