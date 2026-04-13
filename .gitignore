@@ -65,3 +65,13 @@ dist/
 
 # Windows artifact
 nul
+
+# Finetune local artifacts
+finetune/.cache/
+finetune/finetune_env/
+finetune/LLaMA-Factory/
+finetune/models/
+finetune/saves/
+
+# Thesis temporary artifacts
+tmp/

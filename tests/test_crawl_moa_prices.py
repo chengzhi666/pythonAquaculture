@@ -288,8 +288,10 @@ def _run_with_fake_browser(monkeypatch: pytest.MonkeyPatch, strict: str):
 
     def _fake_insert_raw_event(*args, **kwargs):
         written_titles.append(kwargs.get("title", ""))
+        return 1  # fake raw_id
 
     monkeypatch.setattr(moa_prices, "insert_raw_event", _fake_insert_raw_event)
+    monkeypatch.setattr(moa_prices, "upsert_offline_price_snapshot", lambda *a, **kw: None)
     count = moa_prices.run(conn=object())
     return count, written_titles
 

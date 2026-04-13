@@ -25,6 +25,16 @@ if MVP_DIR not in sys.path:
     sys.path.insert(0, MVP_DIR)
 
 from common.db import get_conn  # noqa: E402
+from query.dashboard_queries import (  # noqa: E402
+    get_daily_trend,
+    get_price_by_species_origin,
+    get_price_trend_by_species,
+    get_product_stats,
+    get_recent_crawl_runs,
+    get_recent_products_by_price,
+    get_source_stats,
+    get_total_counts,
+)
 
 # ── Flask app ────────────────────────────────────────────────────────
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -553,6 +563,92 @@ def stats():
             return jsonify(result)
     finally:
         conn.close()
+
+
+# ── 仪表盘 API（对接 dashboard_queries.py）──────────────────────────
+
+
+@app.route("/api/dashboard/overview")
+def dashboard_overview():
+    """仪表盘总览：各表总量 + 来源分布 + 品种分布。"""
+    try:
+        return jsonify({
+            "counts": get_total_counts(),
+            "source_stats": get_source_stats(),
+            "product_stats": get_product_stats(),
+        })
+    except Exception as exc:
+        logger.exception("dashboard overview error: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/dashboard/daily_trend")
+def dashboard_daily_trend():
+    """每日新增采集量趋势线。"""
+    days = max(1, min(int(request.args.get("days", 30)), 365))
+    try:
+        return jsonify({"days": days, "data": get_daily_trend(days=days)})
+    except Exception as exc:
+        logger.exception("dashboard daily_trend error: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/dashboard/price_trend")
+def dashboard_price_trend():
+    """按品种分组的每日均价趋势折线。"""
+    platform = request.args.get("platform", "").strip() or None
+    days = max(1, min(int(request.args.get("days", 90)), 365))
+    try:
+        return jsonify({
+            "days": days,
+            "platform": platform or "all",
+            "data": get_price_trend_by_species(platform=platform, days=days),
+        })
+    except Exception as exc:
+        logger.exception("dashboard price_trend error: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/dashboard/price_ranking")
+def dashboard_price_ranking():
+    """商品价格排行榜（高→低 / 低→高）。"""
+    order = request.args.get("order", "price_desc").strip()
+    limit = max(1, min(int(request.args.get("limit", 10)), 50))
+    try:
+        return jsonify({
+            "order": order,
+            "data": get_recent_products_by_price(order_by=order, limit=limit),
+        })
+    except Exception as exc:
+        logger.exception("dashboard price_ranking error: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/dashboard/species_origin")
+def dashboard_species_origin():
+    """品种-产地均价对比。"""
+    platform = request.args.get("platform", "").strip() or None
+    days = max(1, min(int(request.args.get("days", 30)), 365))
+    try:
+        return jsonify({
+            "days": days,
+            "platform": platform or "all",
+            "data": get_price_by_species_origin(platform=platform, days=days),
+        })
+    except Exception as exc:
+        logger.exception("dashboard species_origin error: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/dashboard/crawl_runs")
+def dashboard_crawl_runs():
+    """最近采集运行记录。"""
+    limit = max(1, min(int(request.args.get("limit", 20)), 100))
+    try:
+        return jsonify({"data": get_recent_crawl_runs(limit=limit)})
+    except Exception as exc:
+        logger.exception("dashboard crawl_runs error: %s", exc)
+        return jsonify({"error": str(exc)}), 500
 
 
 # ── 启动 ──────────────────────────────────────────────────────────────

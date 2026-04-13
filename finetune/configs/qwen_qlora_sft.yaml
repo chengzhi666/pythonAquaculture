@@ -1,0 +1,49 @@
+# ============================================================
+# Qwen2.5-1.5B QLoRA 微调配置
+# 针对 RTX 3060 Laptop 6GB 显存优化
+# ============================================================
+
+### model
+model_name_or_path: ../models/Qwen2.5-1.5B-Instruct
+trust_remote_code: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: all           # 对所有线性层加 LoRA
+lora_rank: 8
+lora_alpha: 16
+lora_dropout: 0.05
+
+### quantization (关键：4-bit 以节省显存)
+quantization_bit: 4
+quantization_method: bitsandbytes
+
+### dataset
+dataset: aquaculture_sft_train
+template: qwen
+cutoff_len: 512            # 6GB 显存下不要超过 512
+max_samples: 1000          # 不限制，用全部 ~724 条训练集
+overwrite_cache: true
+preprocessing_num_workers: 4
+
+### output
+output_dir: ../saves/qwen2.5_1.5b_qlora_aquaculture
+logging_steps: 10
+save_steps: 200
+overwrite_output_dir: true
+
+### train (6GB 显存极限优化)
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8       # 等效 batch_size = 8
+gradient_checkpointing: true         # 必须开！省大量显存
+num_train_epochs: 3.0
+learning_rate: 5.0e-5
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+fp16: true                           # RTX 3060 用 fp16
+ddp_timeout: 180000000
+
+### eval (每 epoch 用测试集验证一次)
+val_size: 0.0                       # 因为已手动拆分测试集

@@ -48,10 +48,12 @@ try:
     from common.logger import get_logger
     from jobs.import_offline_prices import upsert_offline_price_snapshot
 except ModuleNotFoundError:
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
+    _mvp_root = str(Path(__file__).resolve().parents[1])
+    if _mvp_root not in sys.path:
+        sys.path.append(_mvp_root)
     from common.db import get_conn, insert_raw_event
     from common.logger import get_logger
-    from import_offline_prices import upsert_offline_price_snapshot
+    from jobs.import_offline_prices import upsert_offline_price_snapshot
 
 LOGGER = get_logger(__name__)
 

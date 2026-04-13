@@ -1,0 +1,36 @@
+# ============================================================
+# Qwen2.5-1.5B QLoRA 推理/预测配置
+# 用训练好的 LoRA 适配器对测试集做预测
+# ============================================================
+
+### model
+model_name_or_path: ../models/Qwen2.5-1.5B-Instruct
+adapter_name_or_path: ../saves/qwen2.5_1.5b_qlora_aquaculture
+trust_remote_code: true
+
+### method
+stage: sft
+do_predict: true
+finetuning_type: lora
+
+### quantization
+quantization_bit: 4
+quantization_method: bitsandbytes
+
+### dataset
+dataset: aquaculture_sft_train
+eval_dataset: aquaculture_sft_test
+template: qwen
+cutoff_len: 512
+max_samples: 200           # 用全部测试集
+overwrite_cache: true
+
+### output
+output_dir: ../saves/qwen2.5_1.5b_qlora_aquaculture/predict
+overwrite_output_dir: true
+
+### predict
+per_device_eval_batch_size: 1
+max_new_tokens: 256
+predict_with_generate: true
+fp16: true

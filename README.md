@@ -1,8 +1,37 @@
 # pythonAquaculture
 
-## New Contributor: 5-Minute Setup (Windows)
+水产情报采集 MVP。目标是把多来源采集统一成一套流程：`跑批 -> 入 MySQL -> 可回溯 -> 可去重`。
 
-For handing this repo to a new teammate, use this quick path first:
+## 项目简介
+
+项目当前以 **MySQL 作为主存储**，并保留 SQLite 作为可选本地模式。包含两套运行方式：
+
+| | Flask WebUI | 批量处理系统 |
+|---|---|---|
+| **入口** | `app.py` | `fish_intel_mvp/run_one.py` |
+| **数据库** | MySQL（可切 SQLite） | MySQL |
+| **用途** | 交互式展示、情报检索 | 生产级批量采集、日志审计 |
+| **爬虫** | `crawlers/` | `fish_intel_mvp/jobs/` |
+
+当前状态：
+
+- `jd`：已可跑，入表 `product_snapshot`，含 `raw_event` 证据。
+- `moa`：已可跑，入表 `intel_item`，含 `raw_event` 证据。
+- `cnki`：已接入 `paper_meta`，可跑但依赖本机 Selenium/Edge 驱动环境。
+- `taobao`：已实现（基于淘宝 H5 接口抓取，需有效 `TAOBAO_COOKIE`）。
+
+---
+
+## 快速上手
+
+### 环境要求
+
+- Windows 10/11
+- Python 3.9 ~ 3.11
+- Git
+- MySQL 8.x
+
+### 一键 Bootstrap
 
 ```powershell
 git clone https://github.com/chengzhi666/pythonAquaculture.git
@@ -10,173 +39,107 @@ cd pythonAquaculture
 powershell -ExecutionPolicy Bypass -File .\bootstrap.ps1 -SkipChecks
 ```
 
-What the bootstrap now covers:
+`bootstrap.ps1` 会自动完成：创建 `.venv`、安装 `.[dev]` 及 `fish_intel_mvp/requirements.txt`、安装 Playwright Chromium、创建 `.env.local` 和 `fish_intel_mvp/.env`。
 
-- Create `.venv` (if missing)
-- Install `.[dev]`
-- Install `fish_intel_mvp/requirements.txt` (includes `playwright`)
-- Install Playwright Chromium runtime
-- Create `.env.local` and `fish_intel_mvp/.env` from templates
+可选 flags：`-SkipPreCommit`、`-SkipPlaywrightInstall`、`-SkipFishIntelDeps`。
 
-Recommended first-run backend (avoids local DrissionPage port/profile issues):
+### 本地配置
 
-```powershell
-$env:JD_BROWSER_BACKEND='playwright'
-$env:CNKI_BROWSER_BACKEND='playwright'
-$env:TAOBAO_COOKIE_REFRESH_BACKEND='playwright'
+编辑 `fish_intel_mvp/.env`，至少填写：
+
+```dotenv
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASS=你的MySQL密码
+DB_NAME=fish_intel
 ```
 
-Then run one job to verify environment:
+初始化数据库：
 
 ```powershell
-.\.venv\Scripts\python fish_intel_mvp\run_one.py jd
-```
-
-Detailed onboarding guide: see [ONBOARDING.md](ONBOARDING.md).
-
-## Thesis Sync: What To Install
-
-If a junior teammate only needs to sync the latest thesis/demo progress,
-install these first:
-
-- Windows 10/11
-- Python 3.9 to 3.11
-- Git
-- MySQL 8.x
-- Playwright Chromium runtime
-
-Recommended setup:
-
-```powershell
-git clone https://github.com/chengzhi666/pythonAquaculture.git
-cd pythonAquaculture
-python -m venv .venv
-.\.venv\Scripts\activate
-python -m pip install -U pip
-pip install -e .[dev]
-pip install -r fish_intel_mvp\requirements.txt
-python -m playwright install chromium
-```
-
-Create local config files:
-
-```powershell
-Copy-Item .env.local.example .env.local
-Copy-Item fish_intel_mvp\.env.example fish_intel_mvp\.env
-```
-
-Then fill in the MySQL settings in `fish_intel_mvp/.env`.
-
-Initialize MySQL once:
-
-```sql
-CREATE DATABASE IF NOT EXISTS fish_intel DEFAULT CHARSET utf8mb4;
-```
-
-```powershell
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS fish_intel DEFAULT CHARSET utf8mb4;"
 mysql -u root -p fish_intel < fish_intel_mvp\schema.sql
 ```
 
-## Thesis Sync: Useful Commands
+### 验证安装
 
-Run the Flask dashboard:
-
-```powershell
-.\.venv\Scripts\python.exe app.py
-```
-
-Run the full tests and coverage:
+推荐用 Playwright 后端避免 DrissionPage 端口冲突：
 
 ```powershell
-.\.venv\Scripts\python.exe run_full_test.py
+$env:JD_BROWSER_BACKEND='playwright'
+.\.venv\Scripts\python fish_intel_mvp\run_one.py jd
 ```
 
-Optional CNKI fulltext helper for thesis artifacts:
+---
+
+## 使用指南
+
+### Flask WebUI
 
 ```powershell
-.\.venv\Scripts\python.exe fish_intel_mvp\jobs\download_cnki_fulltext.py --theme "<cnki-theme>" --max-papers 5
+.\.venv\Scripts\python app.py
 ```
 
-This helper is separate from `python fish_intel_mvp\run_one.py cnki`.
-Use it when you need real CNKI PDF or HTML files on disk for MinerU experiments.
-It opens a browser for manual login/captcha handling and saves outputs to:
+访问 `http://localhost:5000`，包含 5 个 Tab：📥 数据采集 / 📄 论文数据 / 🛒 商品数据 / 🏪 线下价格 / 📋 渔业政策。
 
-- `data/cnki/pdfs/<theme>/`
-- `data/cnki/fulltexts/<theme>/`
-- `data/cnki/debug/`
+可选切换到本地 SQLite：`$env:STORAGE_BACKEND='sqlite'; python app.py`
 
-## Thesis Sync: Important Pages And Outputs
+### 批量处理系统
 
-- Home page: `http://127.0.0.1:5000/`
-- Salmon thesis analysis page: `http://127.0.0.1:5000/analysis/salmon?days=60`
-- Coverage report: `htmlcov/index.html`
-- PDF parse samples: `results/real_pdf_check/`
+```powershell
+python fish_intel_mvp\run_one.py jd
+python fish_intel_mvp\run_one.py taobao
+python fish_intel_mvp\run_one.py moa
+python fish_intel_mvp\run_one.py cnki
+# 刷新淘宝 Cookie
+python fish_intel_mvp\jobs\refresh_taobao_cookie.py
+```
 
-Recommended screenshot URLs for thesis section 5.5:
+### 微调实验
 
-- Price trend chart:
-  `http://127.0.0.1:5000/analysis/salmon?days=60#trend`
-- Species and origin distribution:
-  `http://127.0.0.1:5000/analysis/salmon?days=30#distribution`
-- Online vs offline comparison:
-  `http://127.0.0.1:5000/analysis/salmon?days=30#compare`
+详见 [finetune/RUN_GUIDE.md](finetune/RUN_GUIDE.md)。
 
-Optional single-platform trend filters:
+### 常用配置项
 
-- JD only:
-  `http://127.0.0.1:5000/analysis/salmon?days=60&platform=jd#trend`
-- Taobao only:
-  `http://127.0.0.1:5000/analysis/salmon?days=60&platform=taobao#trend`
-水产情报采集 MVP。
-目标是把多来源采集统一成一套流程：`跑批 -> 入 MySQL -> 可回溯 -> 可去重`。
+| 配置 | 说明 |
+|------|------|
+| `DB_HOST/DB_PORT/DB_USER/DB_PASS/DB_NAME` | MySQL 连接 |
+| `CNKI_THEME` / `CNKI_PAPERS` / `CNKI_MAX_PAGES` | 知网采集参数 |
+| `TAOBAO_COOKIE` / `TAOBAO_KEYWORDS` / `TAOBAO_PAGES` | 淘宝采集参数 |
+| `TAOBAO_AUTO_REFRESH_COOKIE` | Cookie 失效时自动刷新（默认 1） |
+| `JD_KEYWORDS` / `JD_PAGES` | 京东采集参数 |
+| `EDGE_DRIVER_PATH` / `CHROME_DRIVER_PATH` | 浏览器驱动路径 |
 
-## 系统架构
+### 重要页面
 
-项目当前以 **MySQL 作为主存储**，并保留 SQLite 作为可选本地模式：
+- 首页：`http://127.0.0.1:5000/`
+- 三文鱼分析页：`http://127.0.0.1:5000/analysis/salmon?days=60`
+- 价格趋势：`http://127.0.0.1:5000/analysis/salmon?days=60#trend`
+- 品种/产地分布：`http://127.0.0.1:5000/analysis/salmon?days=30#distribution`
+- 线上线下对比：`http://127.0.0.1:5000/analysis/salmon?days=30#compare`
 
-### 系统一：Flask WebUI（默认 MySQL）
-
-- **入口**：`app.py`
-- **数据库**：默认 MySQL（可通过 `STORAGE_BACKEND=sqlite` 切换到本地 SQLite）
-- **用途**：快速展示、交互式采集、情报检索
-- **爬虫模块**：`crawlers/` 目录下的爬虫
-- **运行方式**：`python app.py`（访问 `http://localhost:5000`）
-
-### 系统二：批量处理系统（MySQL）
-
-- **入口**：`fish_intel_mvp/run_one.py`
-- **数据库**：MySQL（需要预先配置和创建库表）
-- **用途**：生产级批量数据采集、日志审计、完整数据溯源
-- **爬虫模块**：`fish_intel_mvp/jobs/` 目录下的爬虫
-- **运行方式**：`python fish_intel_mvp/run_one.py <job>`
-
-> **注意**：从当前版本开始，`app.py` / `runner.py` 默认也写入 MySQL。只有显式设置 `STORAGE_BACKEND=sqlite` 才使用本地 SQLite。
-
-## 当前状态
-
-- `jd`：已可跑，入表 `product_snapshot`，含 `raw_event` 证据。
-- `moa`：已可跑，入表 `intel_item`，含 `raw_event` 证据。
-- `cnki`：已接入 `paper_meta`，可跑但依赖本机 Selenium/Edge 驱动环境。
-- `taobao`：已实现（基于淘宝 H5 接口抓取，需有效 `TAOBAO_COOKIE`）。
-- `bjform`：占位。
+---
 
 ## 目录结构
 
 ```text
 pythonAquaculture/
   app.py                        # Flask WebUI 入口
-  templates/
-    index.html                  # 前端单页面（含 5 个 Tab 页签）
   runner.py                     # 配置驱动的采集框架
+  config_mgr.py                 # 统一配置管理
   config/
     sites.json                  # 采集源配置文件
-  crawlers/                     # 爬虫模块（供 Streamlit / runner 使用）
+  templates/
+    index.html                  # 前端单页面（5 个 Tab）
+  crawlers/                     # 爬虫模块
     cnki_crawler.py
     moa_fishery_crawler.py
     scholar_crawler.py
+    utils.py                    # 公共工具函数
   storage/
-    db.py                       # 统一存储层（默认 MySQL，兼容 SQLite）
-  fish_intel_mvp/               # 批量处理系统（MySQL）
+    db.py                       # 统一存储层（MySQL / SQLite）
+  fish_intel_mvp/               # 批量处理系统
     common/
       db.py
       logger.py
@@ -186,201 +149,143 @@ pythonAquaculture/
       crawl_moa_fishery.py
       crawl_cnki.py
       crawl_taobao.py
-      crawl_bj_form.py
     run_one.py
     schema.sql
     requirements.txt
-    .env                        # MySQL系统配置
-    .env.example                # 配置示例
+  finetune/                     # 毕设微调实验
+  tests/                        # 单元测试
+  .vscode/                      # VS Code 配置
 ```
 
-## 环境准备
-
-1. **Python 3.9+**
-2. **MySQL**（主存储，系统一/二默认都使用）
-3. 在项目根目录执行：
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -U pip
-pip install -r fish_intel_mvp\requirements.txt
-```
-
-## 快速开始
-
-### 方案 A：Flask WebUI（默认走 MySQL）
-
-```powershell
-.\.venv\Scripts\activate
-python app.py
-```
-
-然后在浏览器访问 `http://localhost:5000`。
-
-**特点**：
-
-- 5 个 Tab 页签：📥 数据采集 / 📄 论文数据 / 🛒 商品数据 / 🏪 线下价格 / 📋 渔业政策
-- 与批处理系统共用 MySQL 数据
-- 交互式操作，即时反馈
-- 可选切换到本地 SQLite：`$env:STORAGE_BACKEND='sqlite'; python app.py`
-
-### 方案 B：批量处理系统（推荐生产环境）
-
-#### 1. 配置
-
-拷贝并编辑 `fish_intel_mvp/.env`：
-
-```dotenv
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASS=你的MySQL密码
-DB_NAME=fish_intel
-
-JD_KEYWORDS=大黄鱼
-JD_PAGES=1
-CNKI_THEME=水产养殖
-CNKI_PAPERS=10
-```
-
-#### 2. 建库建表
-
-```powershell
-# 进入 MySQL 执行
-mysql -u root -p
-
-# 然后在 MySQL 中执行
-CREATE DATABASE IF NOT EXISTS fish_intel DEFAULT CHARSET utf8mb4;
-USE fish_intel;
-SOURCE C:/Users/qiaoruo/PycharmProjects/pythonAquaculture/fish_intel_mvp/schema.sql;
-```
-
-#### 3. 运行任务
-
-```powershell
-.\.venv\Scripts\activate
-python fish_intel_mvp\run_one.py jd
-python fish_intel_mvp\run_one.py taobao
-python fish_intel_mvp\run_one.py moa
-python fish_intel_mvp\run_one.py cnki
-# 仅刷新淘宝Cookie（会弹浏览器，手动登录后自动写回 fish_intel_mvp/.env）
-python fish_intel_mvp\jobs\refresh_taobao_cookie.py
-```
-
-### 常见配置项
-
-- `DB_HOST/DB_PORT/DB_USER/DB_PASS/DB_NAME` - MySQL 连接配置
-- `CNKI_THEME` - 知网搜索主题（默认: aquaculture）
-- `CNKI_PAPERS` - 想采集的论文数量（默认: 10）
-- `CNKI_MAX_PAGES` - 最多检索多少页（默认: 5）
-- `EDGE_DRIVER_PATH/CHROME_DRIVER_PATH` - 浏览器驱动路径（留空自动寻找）
-- `TAOBAO_COOKIE` - 淘宝的登录Cookie（可选）
-- `TAOBAO_KEYWORDS` - 淘宝抓取关键词（逗号分隔）
-- `TAOBAO_PAGES` - 每个关键词抓取页数
-- `TAOBAO_PAGE_SIZE` - 每页抓取条数（建议 <= 50）
-- `TAOBAO_AUTO_REFRESH_COOKIE` - cookie 缺失/失效时是否自动拉起浏览器刷新（默认: 1）
-- `TAOBAO_COOKIE_REFRESH_TIMEOUT_SECONDS` - 浏览器登录等待超时（默认: 180）
-
-## 验收 SQL
-
-### 运行记录
-
-```sql
-USE fish_intel;
-SELECT id, source_name, status, items
-FROM crawl_run
-ORDER BY id DESC
-LIMIT 10;
-```
-
-### 京东（product_snapshot）
-
-```sql
-SELECT platform, keyword, title, price, detail_url, raw_id
-FROM product_snapshot
-ORDER BY id DESC
-LIMIT 20;
-```
-
-### 渔业渔政公告（intel_item）
-
-```sql
-SELECT pub_time, org, title, source_url, raw_id
-FROM intel_item
-ORDER BY id DESC
-LIMIT 20;
-```
-
-### 知网（paper_meta）
-
-```sql
-SELECT pub_date, title, source, url, raw_id
-FROM paper_meta
-ORDER BY id DESC
-LIMIT 20;
-```
-
-### 原始证据（raw_event）
-
-```sql
-SELECT id, source_name, title, pub_time, url
-FROM raw_event
-ORDER BY id DESC
-LIMIT 20;
-```
-
-## 常见问题
-
-1. `ModuleNotFoundError: No module named 'common'`
-   请从项目根目录运行：`python fish_intel_mvp\run_one.py <job>`。
-
-2. `Access denied for user 'root'@'localhost'`
-   检查 `fish_intel_mvp/.env` 的 `DB_USER/DB_PASS`。
-
-3. JD 抓到 `items=0`
-   先用 `JD_PAGES=1`，并手动确认浏览器页面确实出现商品卡片。
-
-4. MOA 出现 MySQL 断连
-   任务里已对大内容做截断和 PDF 特殊处理。若仍偶发，重跑即可。
-
-5. CNKI 启动失败或超时
-   通常是 Edge 与 EdgeDriver 版本不匹配，或本机 webdriver 环境问题。
-   可在 `.env` 设置 `EDGE_DRIVER_PATH`。
-
-6. Taobao 提示 `FAIL_SYS_TOKEN_EXOIRED`
-   默认会自动触发 cookie 刷新；若不想自动弹浏览器，可设置 `TAOBAO_AUTO_REFRESH_COOKIE=0`，再手动运行 `python fish_intel_mvp\jobs\refresh_taobao_cookie.py`。
-
-7. Taobao 扫码页自动跳回账号密码
-   可设置 `TAOBAO_COOKIE_REFRESH_USE_SYSTEM_PROFILE=1`（默认）并将 `TAOBAO_COOKIE_REFRESH_START_URL` 设为 `https://login.taobao.com/member/login.jhtml`；必要时手动运行刷新脚本再扫码。
+---
 
 ## 开发指南
 
-详见 [DEVELOPMENT.md](DEVELOPMENT.md)，包含：
+### 分支与提交规范
 
-- 环境设置和依赖安装
-- 代码质量工具（Black、Flake8、MyPy、Pylint）
-- 单元测试和覆盖率
-- 公共工具函数使用
-- 配置管理
-- 数据库优化技巧
-
-## 项目优化
-
-最近的优化包括：
-
-- ✅ **批量插入优化**：SQLite 使用事务提高性能
-- ✅ **日志系统**：统一的日志记录和错误处理
-- ✅ **工具函数**：提取公共的文本处理函数（`crawlers/utils.py`）
-- ✅ **Flask REST API**：后端接口分离，前端单页面通过 `/api/...` 与后端交互
-- ✅ **配置管理**：统一的环境变量管理（`config_mgr.py`）
-- ✅ **项目规范**：`pyproject.toml` 和 `pytest` 测试框架
-- ✅ **测试框架**：单元测试示例（`tests/test_storage.py`）
-
-## Git 提交
+始终在 feature 分支开发，不要直接提交 `main`：
 
 ```powershell
-git add .
-git commit -m "your message"
-git push
+git checkout -b feat/short-description
+# ... 开发 ...
+git add -A
+git commit -m "feat: concise change summary"
+git push origin feat/short-description
 ```
+
+提交前 PR 前确保本地检查通过。
+
+### 代码质量工具
+
+```powershell
+# 代码检查
+.\.venv\Scripts\python -m ruff check .
+
+# 格式化
+.\.venv\Scripts\python -m black --check .
+
+# 类型检查
+mypy crawlers/ storage/ query/ --ignore-missing-imports
+```
+
+### 运行测试
+
+```powershell
+# 全部测试 + 覆盖率
+pytest
+
+# 特定文件
+pytest tests/test_storage.py -v
+
+# 按标记
+pytest -m unit
+pytest -m integration
+
+# 一键跑测试（含覆盖率报告）
+python run_full_test.py
+```
+
+### 公共工具函数
+
+`crawlers/utils.py` 提供常用工具：
+
+```python
+from crawlers.utils import clean_text, extract_keywords, extract_date, normalize_url
+```
+
+### 配置管理
+
+```python
+from config_mgr import get_config
+config = get_config()
+print(f"数据库：{config.DB_HOST}:{config.DB_PORT}")
+```
+
+### IDE 配置
+
+项目已配置 VS Code 开发环境（`.vscode/` 目录），包含：
+
+- 9 个调试配置（Flask、各爬虫、测试）
+- 10 个运行任务
+- 推荐扩展列表
+
+运行 `.\setup_vscode.ps1 -All` 可一键安装扩展和配置环境。
+
+快捷键：**F11** 启动 Flask / **F5** 调试 / **Ctrl+Shift+B** 格式化。
+
+详细配置说明见 `.vscode/README.md`。
+
+### CI 门控
+
+当前 CI 包含：Ruff lint、Black 格式检查、单元测试、安全扫描（Bandit）。
+
+---
+
+## 架构与设计决策
+
+- **批量事务优化**：`save_items()` 使用事务批量提交，性能提升 3-5 倍，保证原子性。
+- **统一日志**：所有模块使用 `logging` 标准库，操作可追溯、错误可定位。
+- **公共工具层**：文本清洗、关键词提取、日期提取、URL 标准化统一在 `crawlers/utils.py`，消除重复代码。
+- **配置集中化**：`config_mgr.py` 作为单一事实来源，统一管理环境变量和配置验证。
+- **Flask REST API**：前后端分离，前端单页面通过 `/api/...` 与后端交互。
+- **项目规范化**：`pyproject.toml` + `pytest` + `pre-commit`，支持 `pip install -e ".[dev]"`。
+
+---
+
+## 验收 SQL
+
+```sql
+USE fish_intel;
+
+-- 运行记录
+SELECT id, source_name, status, items FROM crawl_run ORDER BY id DESC LIMIT 10;
+
+-- 京东
+SELECT platform, keyword, title, price, detail_url, raw_id FROM product_snapshot ORDER BY id DESC LIMIT 20;
+
+-- 渔业渔政
+SELECT pub_time, org, title, source_url, raw_id FROM intel_item ORDER BY id DESC LIMIT 20;
+
+-- 知网
+SELECT pub_date, title, source, url, raw_id FROM paper_meta ORDER BY id DESC LIMIT 20;
+
+-- 原始证据
+SELECT id, source_name, title, pub_time, url FROM raw_event ORDER BY id DESC LIMIT 20;
+```
+
+---
+
+## 排错指南
+
+| 问题 | 解决方案 |
+|------|---------|
+| `ModuleNotFoundError: No module named 'common'` | 从项目根目录运行：`python fish_intel_mvp\run_one.py <job>` |
+| `Access denied for user 'root'@'localhost'` | 检查 `fish_intel_mvp/.env` 的 `DB_USER/DB_PASS` |
+| JD 抓到 `items=0` | 先用 `JD_PAGES=1`，确认浏览器页面出现商品卡片 |
+| MOA MySQL 断连 | 已有截断和 PDF 特殊处理，偶发时重跑即可 |
+| CNKI 启动失败或超时 | Edge 与 EdgeDriver 版本不匹配，在 `.env` 设 `EDGE_DRIVER_PATH` |
+| Taobao `FAIL_SYS_TOKEN_EXOIRED` | 默认自动刷新；禁用：`TAOBAO_AUTO_REFRESH_COOKIE=0`，手动运行 `refresh_taobao_cookie.py` |
+| Taobao 扫码页跳回密码登录 | 设 `TAOBAO_COOKIE_REFRESH_USE_SYSTEM_PROFILE=1`，手动运行刷新脚本 |
+| `python` not found | 重装 Python 并勾选 "Add Python to PATH" |
+| 虚拟环境激活被阻止 | 改用直接路径：`.\.venv\Scripts\python ...` |
+| Import/path 错误 | 确保从仓库根目录运行命令 |

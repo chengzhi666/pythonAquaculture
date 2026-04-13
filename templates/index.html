@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>水产养殖情报采集与分析系统</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
 /* ── 全局 ─────────────────────────────────────────────── */
 :root {
@@ -126,7 +127,41 @@ td a:hover { text-decoration: underline; }
   .form-row { flex-direction: column; }
   .container { padding: 16px; }
   .header { flex-direction: column; gap: 10px; padding: 16px; }
+  .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .chart-grid { grid-template-columns: 1fr; }
 }
+
+/* ── 仪表盘指标卡片 ────────────────────────── */
+.metric-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px;
+}
+.metric-card {
+  background: var(--card); border-radius: var(--radius);
+  box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 20px; text-align: center;
+}
+.metric-card .metric-icon { font-size: 28px; margin-bottom: 6px; }
+.metric-card .metric-value { font-size: 28px; font-weight: 700; color: var(--primary); }
+.metric-card .metric-label { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+
+/* ── 图表布局 ──────────────────────────────── */
+.chart-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;
+}
+.chart-box {
+  background: var(--card); border-radius: var(--radius);
+  box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 20px;
+}
+.chart-box h3 { font-size: 15px; margin-bottom: 12px; color: var(--text); }
+.chart-box .plotly-chart { width: 100%; min-height: 320px; }
+.chart-full {
+  background: var(--card); border-radius: var(--radius);
+  box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 20px; margin-bottom: 20px;
+}
+.chart-full h3 { font-size: 15px; margin-bottom: 12px; color: var(--text); }
+.chart-full .plotly-chart { width: 100%; min-height: 380px; }
+
+/* ── 运行记录表 ────────────────────────────── */
+.run-table { max-height: 300px; overflow-y: auto; }
 </style>
 </head>
 <body>
@@ -139,7 +174,8 @@ td a:hover { text-decoration: underline; }
 
 <!-- ═══════════════════ Tab 页签 ═══════════════════ -->
 <div class="tabs">
-  <button class="tab-btn active" data-tab="collect">📥 数据采集</button>
+  <button class="tab-btn active" data-tab="dashboard">📊 数据总览</button>
+  <button class="tab-btn" data-tab="collect">📥 数据采集</button>
   <button class="tab-btn" data-tab="papers">📄 论文数据</button>
   <button class="tab-btn" data-tab="products">🛒 商品数据</button>
   <button class="tab-btn" data-tab="offline">🏪 线下价格</button>
@@ -148,8 +184,55 @@ td a:hover { text-decoration: underline; }
 
 <div class="container">
 
+<!-- ═══════════════════ 数据总览 ═══════════════════ -->
+<div class="tab-content active" id="tab-dashboard">
+  <!-- 指标卡片 -->
+  <div class="metric-grid" id="metricCards">
+    <div class="metric-card"><div class="metric-icon">📄</div><div class="metric-value" id="mc-papers">-</div><div class="metric-label">学术论文</div></div>
+    <div class="metric-card"><div class="metric-icon">🛒</div><div class="metric-value" id="mc-products">-</div><div class="metric-label">商品快照</div></div>
+    <div class="metric-card"><div class="metric-icon">📋</div><div class="metric-value" id="mc-intel">-</div><div class="metric-label">情报条目</div></div>
+    <div class="metric-card"><div class="metric-icon">🔄</div><div class="metric-value" id="mc-runs">-</div><div class="metric-label">采集运行</div></div>
+  </div>
+
+  <!-- 每日趋势 + 来源分布 -->
+  <div class="chart-grid">
+    <div class="chart-box">
+      <h3>📈 每日采集量趋势（近30天）</h3>
+      <div class="plotly-chart" id="dailyTrendChart"></div>
+    </div>
+    <div class="chart-box">
+      <h3>📊 数据来源分布</h3>
+      <div class="plotly-chart" id="sourceDistChart"></div>
+    </div>
+  </div>
+
+  <!-- 品种价格趋势 -->
+  <div class="chart-full">
+    <h3>💰 各品种日均价趋势（近90天）</h3>
+    <div class="plotly-chart" id="priceTrendChart"></div>
+  </div>
+
+  <!-- 品种-产地均价 + 价格排行 -->
+  <div class="chart-grid">
+    <div class="chart-box">
+      <h3>🌍 品种-产地均价对比</h3>
+      <div class="plotly-chart" id="speciesOriginChart"></div>
+    </div>
+    <div class="chart-box">
+      <h3>🏆 商品价格排行 Top 10</h3>
+      <div class="run-table" id="priceRankingTable"><div class="no-data">加载中...</div></div>
+    </div>
+  </div>
+
+  <!-- 最近运行记录 -->
+  <div class="card">
+    <h3>🕐 最近采集运行记录</h3>
+    <div class="run-table" id="crawlRunsTable"><div class="no-data">加载中...</div></div>
+  </div>
+</div>
+
 <!-- ═══════════════════ 采集页 ═══════════════════ -->
-<div class="tab-content active" id="tab-collect">
+<div class="tab-content" id="tab-collect">
   <div class="card">
     <h3>⚙️ 启动采集任务</h3>
     <div class="tips">
@@ -583,6 +666,161 @@ function onCrawlerChange() {
     kwInput.placeholder = '如：三文鱼、大黄鱼、虹鳟...';
   }
 }
+
+/* ═══════════════════════════════════════════════ */
+/*           📊 数据总览仪表盘逻辑               */
+/* ═══════════════════════════════════════════════ */
+
+const PLOTLY_LAYOUT_BASE = {
+  paper_bgcolor: '#fff', plot_bgcolor: '#fff',
+  margin: {l: 50, r: 20, t: 40, b: 40},
+  font: {family: '"Microsoft YaHei", sans-serif', size: 12},
+};
+const PLOTLY_CFG = {displayModeBar: false, responsive: true};
+
+async function loadDashboard() {
+  try {
+    await Promise.all([
+      loadOverview(),
+      loadDailyTrend(),
+      loadPriceTrend(),
+      loadSpeciesOrigin(),
+      loadPriceRanking(),
+      loadCrawlRuns(),
+    ]);
+  } catch(e) { console.error('Dashboard load error:', e); }
+}
+
+async function loadOverview() {
+  const r = await fetch('/api/dashboard/overview');
+  const d = await r.json();
+  if (d.error) return;
+  const c = d.counts || {};
+  document.getElementById('mc-papers').textContent = (c.papers || 0).toLocaleString();
+  document.getElementById('mc-products').textContent = (c.products || 0).toLocaleString();
+  document.getElementById('mc-intel').textContent = (c.intel_items || 0).toLocaleString();
+  document.getElementById('mc-runs').textContent = (c.crawl_runs || 0).toLocaleString();
+
+  // 来源分布饼图
+  const srcStats = d.source_stats || [];
+  if (srcStats.length > 0) {
+    Plotly.newPlot('sourceDistChart', [{
+      type: 'pie',
+      labels: srcStats.map(x => x.source_type),
+      values: srcStats.map(x => x.count),
+      textinfo: 'label+percent',
+      hole: 0.35,
+      marker: {colors: ['#1677ff','#52c41a','#faad14','#ff4d4f','#722ed1','#13c2c2']},
+    }], {...PLOTLY_LAYOUT_BASE, title: '', margin: {l: 20, r: 20, t: 10, b: 10}}, PLOTLY_CFG);
+  } else {
+    document.getElementById('sourceDistChart').innerHTML = '<div class="no-data">暂无数据</div>';
+  }
+}
+
+async function loadDailyTrend() {
+  const r = await fetch('/api/dashboard/daily_trend?days=30');
+  const d = await r.json();
+  const rows = d.data || [];
+  if (rows.length === 0) {
+    document.getElementById('dailyTrendChart').innerHTML = '<div class="no-data">暂无数据</div>';
+    return;
+  }
+  const traces = [
+    {x: rows.map(r => r.date), y: rows.map(r => r.intel_items), name: '情报条目', type: 'scatter', mode: 'lines+markers', line: {width: 3, color: '#1677ff'}, marker: {size: 6}},
+    {x: rows.map(r => r.date), y: rows.map(r => r.products), name: '商品快照', type: 'scatter', mode: 'lines+markers', line: {width: 3, color: '#52c41a'}, marker: {size: 6}},
+  ];
+  Plotly.newPlot('dailyTrendChart', traces, {
+    ...PLOTLY_LAYOUT_BASE, xaxis: {title: '日期'}, yaxis: {title: '新增条数'},
+    legend: {orientation: 'h', y: 1.12},
+  }, PLOTLY_CFG);
+}
+
+async function loadPriceTrend() {
+  const r = await fetch('/api/dashboard/price_trend?days=90');
+  const d = await r.json();
+  const rows = d.data || [];
+  if (rows.length === 0) {
+    document.getElementById('priceTrendChart').innerHTML = '<div class="no-data">暂无数据</div>';
+    return;
+  }
+  // 按品种分组
+  const grouped = {};
+  const COLORS = ['#1677ff','#ff4d4f','#52c41a','#faad14','#722ed1','#13c2c2','#eb2f96'];
+  for (const row of rows) {
+    const key = row.product_type || '未知';
+    if (!grouped[key]) grouped[key] = {x: [], y: []};
+    grouped[key].x.push(row.date);
+    grouped[key].y.push(Number(row.avg_price));
+  }
+  const traces = Object.entries(grouped).map(([name, data], i) => ({
+    x: data.x, y: data.y, name, type: 'scatter', mode: 'lines+markers',
+    line: {width: 3, color: COLORS[i % COLORS.length]}, marker: {size: 5},
+  }));
+  Plotly.newPlot('priceTrendChart', traces, {
+    ...PLOTLY_LAYOUT_BASE, xaxis: {title: '日期'}, yaxis: {title: '均价（元）'},
+    legend: {orientation: 'h', y: 1.1},
+  }, PLOTLY_CFG);
+}
+
+async function loadSpeciesOrigin() {
+  const r = await fetch('/api/dashboard/species_origin?days=30');
+  const d = await r.json();
+  const rows = d.data || [];
+  if (rows.length === 0) {
+    document.getElementById('speciesOriginChart').innerHTML = '<div class="no-data">暂无数据</div>';
+    return;
+  }
+  // 分组柱状图: x=品种, 同一品种下不同产地为不同 trace
+  const origins = [...new Set(rows.map(r => r.origin))];
+  const species = [...new Set(rows.map(r => r.product_type))];
+  const COLORS = ['#1677ff','#ff4d4f','#52c41a','#faad14','#722ed1','#13c2c2'];
+  const traces = origins.map((origin, i) => ({
+    x: species, name: origin, type: 'bar',
+    marker: {color: COLORS[i % COLORS.length]},
+    y: species.map(sp => {
+      const match = rows.find(r => r.product_type === sp && r.origin === origin);
+      return match ? Number(match.avg_price) : 0;
+    }),
+  }));
+  Plotly.newPlot('speciesOriginChart', traces, {
+    ...PLOTLY_LAYOUT_BASE, barmode: 'group',
+    xaxis: {title: '品种'}, yaxis: {title: '均价（元）'},
+    legend: {orientation: 'h', y: 1.15},
+  }, PLOTLY_CFG);
+}
+
+async function loadPriceRanking() {
+  const r = await fetch('/api/dashboard/price_ranking?order=price_desc&limit=10');
+  const d = await r.json();
+  const rows = d.data || [];
+  const el = document.getElementById('priceRankingTable');
+  if (rows.length === 0) { el.innerHTML = '<div class="no-data">暂无数据</div>'; return; }
+  let html = '<table><thead><tr><th>#</th><th>商品名称</th><th>平台</th><th>价格</th><th>产地</th><th>采集时间</th></tr></thead><tbody>';
+  rows.forEach((row, i) => {
+    const title = (row.title || '').length > 30 ? row.title.substring(0, 30) + '…' : (row.title || '');
+    html += `<tr><td>${i + 1}</td><td title="${(row.title||'').replace(/"/g,'&quot;')}">${title}</td><td>${row.platform || '-'}</td><td style="font-weight:600;color:var(--error)">¥${row.price || '-'}</td><td>${row.origin_standardized || '-'}</td><td>${row.snapshot_time || '-'}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+async function loadCrawlRuns() {
+  const r = await fetch('/api/dashboard/crawl_runs?limit=15');
+  const d = await r.json();
+  const rows = d.data || [];
+  const el = document.getElementById('crawlRunsTable');
+  if (rows.length === 0) { el.innerHTML = '<div class="no-data">暂无运行记录</div>'; return; }
+  let html = '<table><thead><tr><th>数据源</th><th>状态</th><th>条数</th><th>开始时间</th><th>结束时间</th><th>错误</th></tr></thead><tbody>';
+  rows.forEach(row => {
+    const statusCls = row.status === 'OK' ? 'done' : row.status === 'RUNNING' ? 'running' : 'error';
+    html += `<tr><td>${row.source_name || '-'}</td><td><span class="status-badge status-${statusCls}">${row.status || '-'}</span></td><td>${row.items ?? '-'}</td><td>${row.started_at || '-'}</td><td>${row.ended_at || '-'}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${(row.error_text||'').replace(/"/g,'&quot;')}">${row.error_text || '-'}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+// 页面加载时初始化仪表盘
+loadDashboard();
 </script>
 </body>
 </html>

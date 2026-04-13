@@ -471,11 +471,14 @@ def run(
     my_cna = _extract_cookie_value(cookie, "cna")
     snapshot_time = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     session = _build_session(cookie=cookie, user_agent=user_agent)
-    browser_refreshed_once = False
+
+    # 每个关键词允许独立尝试 L2 浏览器重建，因此标记按关键词维度重置
+    _MAX_HEAL_RETRIES = 3  # 支持 L1→L2→L3 完整级联
 
     written = 0
     for keyword in keywords:
         LOGGER.info("taobao start keyword=%s pages=%s", keyword, max_pages)
+        browser_refreshed_this_keyword = False  # 每个关键词独立允许一次 L2
 
         for page in range(1, max_pages + 1):
             if written >= max_items:
@@ -483,7 +486,11 @@ def run(
                 return written
 
             heal.pages_attempted += 1
-            for attempt in range(2):
+            products: list[dict] = []
+            raw_text: str = ""
+            page_fused = False
+
+            for attempt in range(_MAX_HEAL_RETRIES):
                 try:
                     products, raw_text = _fetch_page(
                         session,
@@ -502,33 +509,34 @@ def run(
                     heal.token_expired_count += 1
 
                     # ---- Level 1: 静默 Token 刷新 ----
-                    if heal_level >= 1:
+                    if heal_level >= 1 and attempt == 0:
                         heal.level1_attempts += 1
                         refreshed = _extract_token_from_cookie_value(
                             _cookie_dict_from_jar(session).get("_m_h5_tk", "")
                         )
-                        if refreshed and refreshed != token and attempt == 0:
+                        if refreshed and refreshed != token:
                             token = refreshed
                             heal.level1_recovered += 1
-                            LOGGER.info("taobao token refreshed (L1), retry current page")
+                            LOGGER.info("taobao token refreshed (L1), retry page %s", page)
                             continue
 
                     # ---- Level 2: 浏览器会话重建 ----
-                    if heal_level >= 2 and not browser_refreshed_once:
+                    if heal_level >= 2 and not browser_refreshed_this_keyword and attempt <= 1:
                         heal.level2_attempts += 1
                         new_cookie = _try_refresh_cookie("token_expired")
-                        browser_refreshed_once = True
+                        browser_refreshed_this_keyword = True
                         if new_cookie:
                             cookie = new_cookie
                             token = _extract_token_from_cookie(cookie) or token
                             my_cna = _extract_cookie_value(cookie, "cna")
                             session = _build_session(cookie=cookie, user_agent=user_agent)
                             heal.level2_recovered += 1
-                            LOGGER.info("taobao cookie refreshed via browser (L2), retry current page")
+                            LOGGER.info("taobao cookie refreshed via browser (L2), retry page %s", page)
                             continue
 
-                    # ---- Level 3: 熔断跳过（不抛异常，跳到下一页） ----
+                    # ---- Level 3: 熔断跳过（跳过当前页面，继续下一页） ----
                     heal.level3_fused += 1
+                    page_fused = True
                     LOGGER.warning(
                         "taobao page fused (L3): keyword=%s page=%s heal_level=%s err=%s",
                         keyword,
@@ -536,15 +544,18 @@ def run(
                         heal_level,
                         exc,
                     )
-                    products, raw_text = [], ""
                     break
                 except Exception as exc:  # noqa: BLE001
                     LOGGER.warning(
                         "taobao page failed: keyword=%s page=%s err=%s", keyword, page, exc
                     )
-                    products, raw_text = [], ""
                     break
 
+            # 熔断跳过的页面：继续下一页，不终止整个关键词
+            if page_fused:
+                continue
+
+            # 真正的空结果（API 返回 0 条）：说明后续页已无数据
             if not products:
                 LOGGER.info("taobao empty page: keyword=%s page=%s", keyword, page)
                 break
