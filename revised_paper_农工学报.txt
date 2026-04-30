@@ -1,0 +1,326 @@
+面向农业垂直领域的Web数据智能采集技术研究综述
+杨志诚1,2,3,4,5,6,7，吕春利1,2,3,4,5,6*，张　旭1,2,3,4,5,6
+（1. 国家数字渔业创新中心，北京 100083；2. 农业农村部智慧养殖技术重点实验室，北京 100083；3. 农业水资源高效利用全国重点实验室，北京 100083；4. 北京市农业物联网工程技术研究中心，北京 100083；5. 中国农业大学 信息与电气工程学院，北京 100083；6. 山东省数字渔业重点实验室，烟台 264670；7. 中国农业大学烟台研究院，烟台 264670）
+摘　要：【目的】针对农业垂直领域多源异构Web数据获取面临的政务公告非结构化、电商平台访问控制严格及跨库溯源困难等瓶颈，系统综述面向农业场景的Web数据智能采集关键技术。【方法】以URL前沿队列为主线，从主题判别与收益驱动调度、“接口优先、渲染兜底”采集闭环、访问控制合规与溯源数据治理、大语言模型网页智能体四个维度，梳理国内外相关技术进展与在农业场景中的适用条件；提出“规则主干＋智能体插件”混合范式，并结合水产养殖情报采集场景说明相关技术在农业领域中的映射方式。【结果】综述表明，垂直爬虫在通用骨架上叠加主题约束与领域抽取增强后，可在有限预算下有效提升收获率；“接口优先、渲染兜底”闭环与分级凭证管理策略有助于适配农业电商平台的差异化访问控制策略；深度版面分析技术为中文农业学术文献的高保真解析提供了可行路径；CoT推理链的差异化注入有助于提升领域微调语料的推理深度。水产养殖场景的案例映射表明，上述技术在多源异构采集与领域语料构建中在当前测试条件下显示出一定的适配可行性。【结论】面向农业垂直领域的智能采集相关技术已呈现出由调度、采集、治理与语料化构成的较清晰技术主线，未来需在多模态页面理解、自适应调度、合规工程化与领域语料治理等方面持续深入。
+关键词：农业信息采集；垂直领域爬虫；URL调度；增量重访；动态页面采集；网页智能体；数据治理；水产养殖
+中图分类号：S126；TP393.4　　文献标志码：A
+基金项目：烟台市校地融合发展项目（2024XDRHXMPT11）——现代渔业智慧创新平台
+作者简介：杨志诚（2000—），男，硕士研究生，研究方向为农业信息采集与智能处理。Email: a45581478@qq.com
+通信作者：吕春利，教授，研究方向为农业信息技术。Email: lvchunli@cau.edu.cn
+
+A survey of intelligent Web data acquisition technologies for agricultural vertical domains
+YANG Zhicheng1,2,3,4,5,6,7, LÜ Chunli1,2,3,4,5,6*, ZHANG Xu1,2,3,4,5,6
+(1. National Innovation Center for Digital Fishery, Beijing 100083, China; 2. Key Laboratory of Smart Aquaculture Technology, Ministry of Agriculture and Rural Affairs, Beijing 100083, China; 3. National Key Laboratory for Efficient Utilization of Agricultural Water Resources, Beijing 100083, China; 4. Beijing Engineering and Technology Research Center for Internet of Things in Agriculture, Beijing 100083, China; 5. College of Information and Electrical Engineering, China Agricultural University, Beijing 100083, China; 6. Key Laboratory of Digital Fisheries of Shandong Province, Yantai 264670, China; 7. Yantai Institute of China Agricultural University, Yantai 264670, China)
+Abstract: OBJECTIVE: To systematically review intelligent Web data acquisition technologies for agricultural vertical domains in response to bottlenecks such as the unstructured nature of government bulletins, stringent access-control mechanisms on agricultural e-commerce platforms, and poor cross-database traceability.
+METHOD: Organized around the URL frontier, this survey analyzes topical filtering and benefit-driven scheduling, an API-first/rendering-fallback acquisition loop, access-control compliance and provenance-aware data governance, and LLM-driven web agents, and discusses their applicability in agricultural scenarios through aquaculture case mapping.
+RESULTS: The review shows that focused crawling with domain constraints, API-first acquisition, tiered credential management, deep layout analysis, and differentiated CoT-enhanced SFT sample construction provide feasible technical paths for multi-source collection and domain corpus building in current agricultural scenarios.
+CONCLUSION: Intelligent acquisition technologies for agricultural vertical domains have formed a relatively clear technical thread spanning scheduling, acquisition, governance, and corpus construction, while multimodal page understanding, adaptive scheduling, compliance engineering, and domain corpus governance remain key directions for future research.
+Key words: agricultural information acquisition; vertical-domain crawler; URL scheduling; incremental revisiting; dynamic page acquisition; web agent; data governance; aquaculture
+
+0　引　言
+数字农业建设对多源异构数据的持续获取提出了迫切需求。我国2024年水产养殖产量达6 060万t，占全球总产量的60%以上[74]。中央一号文件与《数字农业农村发展规划（2019—2025年）》均明确要求推进智慧农业发展，依托信息化手段提升生产效率与市场洞察能力[75,76]。然而，水产养殖等农业垂直领域的Web数据获取面临三重独特痛点：其一，政务公告（如农业农村部渔业渔政管理局通知）以非结构化HTML为主，缺乏统一字段规范，品种名称、政策时效与适用区域等关键信息散落于自由文本之中，传统模板解析极易因版式变更而失效；其二，农业电商数据（如京东农资与淘宝农产品）存在规格表达高度不一致的问题——同一品种（如三文鱼）在不同平台上的重量单位、包装规格、产地标注方式各异，且平台普遍部署了会话验证、访问频率限制等数据保护机制；其三，跨库溯源困难，学术文献（CNKI、Semantic Scholar）、市场价格与政策法规之间缺少统一标识关联，数据孤岛现象严重[77-79]。正是农业数据的上述独特痛点，决定了必须引入收益驱动的智能调度、渲染兜底的动态采集以及智能体辅助的交互式采集技术，方能在有限预算下实现高效、稳定、合规的全链路数据获取。物联网与智能养殖技术的发展进一步扩大了水产数据源的种类与规模[69-73]。
+与此同时，农业垂直领域大语言模型（如“范蠡”大模型）的涌现对高质量训练语料产生了强烈需求[80,81]。水产养殖领域的高价值情报散落于政务公告、学术文献数据库及电商平台等多种异构站点，传统爬虫工具难以稳定获取[82,83]；多源数据格式高度异构，缺乏统一的标准化管理规范[84,85]。此外，中文水产学术论文普遍采用双栏排版、跨栏表格与嵌入式公式等复杂版面，传统PDF解析工具面对此类文献时段落乱序、表格丢失与公式乱码问题突出，高价值专业知识大量流失。因此，构建面向农业垂直领域的智能数据采集与结构化技术体系，对于突破“数据获取—知识提取—语料构建”全链路瓶颈具有重要的工程应用价值与数据基建意义。
+通用爬虫强调覆盖，适用于搜索引擎索引构建；但在农业垂直任务中普遍存在无关抓取比例高、重要站点发现与刷新不及时、动态渲染导致链路易失效等问题。垂直领域爬虫在通用抓取骨架上引入相关度评估、收益导向URL调度、动态内容采集与质量合规治理机制[1,6,8]。近年来，大语言模型推动网页智能体快速发展，使登录态、筛选与排序、多步表单等交互入口可通过“规划—执行—反馈”闭环完成采集[59]，为农业电商平台与学术文献数据库等深层网络处理提供了新的低维护路径[51,52]。
+本文的主要工作如下：1）提出以URL前沿队列为核心、面向长期运行的“调度—采集—判别—抽取—治理”统一框架，明确模块边界与可观测指标；2）围绕主题判别、收益驱动调度、深层网络与动态页面采集、访问控制合规、质量溯源与数据治理，系统总结面向农业场景的可复用工程要点与常见失效模式；3）综述网页智能体与可执行评测基准，提出“规则主干＋智能体插件”混合落地范式；4）结合水产养殖情报采集场景，说明所综述技术在多源采集、凭证管理、文献版面解析与领域语料构建等环节的映射方式。
+本综述的文献检索涵盖Web of Science、Scopus、CNKI与Google Scholar四个数据库，检索时间范围为1998—2025年。英文检索式采用(“focused crawler” OR “vertical crawler” OR “web scraping” OR “deep web crawling” OR “web agent” OR “web data extraction”) AND (“agriculture” OR “aquaculture” OR “farming”)，中文检索词包括“聚焦爬虫”“垂直领域爬虫”“网页采集”“深层网络”“网页智能体”“农业数据采集”“水产养殖信息化”等组合。纳入标准：（1）发表于同行评审期刊或高水平学术会议；（2）涉及爬虫架构、调度策略、动态采集、数据治理或网页智能体等核心主题。排除标准：（1）仅涉及搜索引擎排名而不涉及采集技术；（2）内容与已纳入文献高度重复。在数据库检索基础上，辅以前向与后向引文追踪及人工筛选进行补充。最终纳入88篇文献，按技术主线分为通用与分布式爬虫、聚焦爬虫与调度、深层网络与动态采集、访问控制合规与数据治理、网页智能体与评测以及农业信息化等方向；其中2020年及以后发表的文献约占48%。分类框架依据爬虫系统的工程模块边界（调度—采集—判别—抽取—治理）构建，对应第2节分层架构组织综述脉络。
+1　相关工作
+1.1　通用与分布式网络爬虫
+通用Web爬虫以覆盖与可抓取性为目标，围绕URL前沿队列完成下载、解析、链接抽取、去重、礼貌访问与失败恢复等[1,3-5,14]，其中宽度优先策略可优先发现高质量页面[14]；刷新与重访策略决定新鲜度与成本折中[13]。并行与增量爬取进一步关注多节点去重、通信开销与刷新预算分配[28-31]。工程系统如IRLbot、Heritrix与Nutch展示了规模化抓取的架构与可复用实现路径[32-34]，为垂直爬虫提供稳定的抓取底座。
+1.2　聚焦（主题）爬虫与相关度评估
+聚焦爬虫通过主题模型与相关度判别选择页面与链接，在有限预算下提高有效收获率[6-8]。相关度估计可融合内容、锚文本上下文、URL词元以及站点历史命中率等信号[6,8]。为加速到达高相关度主题区域，context graph与topical locality等工作指出主题相关性具有局部聚集特征[7,35]；学习排序与表示学习进一步将URL选择建模为排序问题[36]。
+1.3　深层网络与动态页面采集
+Google的Deep-Web crawl表明，可扩展的表单理解与查询生成是规模化深网抓取关键[18]；相关研究从查询空间建模与覆盖驱动采样持续推进[17,19]。单页应用（SPA）与脚本渲染促使采集链路由静态HTML解析转变为"渲染＋交互"，常采用"接口优先、渲染兜底"的混合策略[20]。
+1.4　合规、礼貌访问与质量治理
+REP（robots.txt）已标准化为RFC 9309[22]，HTTP语义（如429、5xx）为限流与异常处理提供可观测信号[21]。工程上常按host配置并发与QPS上限，结合近重复检测与指纹去重抑制重复抓取[15]。数据治理层面需记录溯源元数据、版本与质量标记[43,44]。
+1.5　大模型驱动的网页智能体
+网页智能体将浏览器操作纳入可学习决策过程，评测从Mind2Web[51]到WebArena[52]、VisualWebArena[55]、AgentBench[54]与BrowserGym[58]逐步丰富。与传统爬虫相比，智能体强调任务成功率，但也带来成本、稳定性与安全合规问题[50,56]。
+1.6　农业领域信息采集研究现状
+农业信息化快速发展推动了对多源异构农业数据的自动化采集需求。李道亮等[77]分析了人工智能在水产养殖中的应用前景，指出数据获取是实现智能化管理的首要环节。穆维松等[84]综述了知识图谱技术在农业中的研究进展，强调多源数据融合的重要性。吴华瑞等[85]调查了农业文本语义理解技术现状，指出农业数据来源分散、格式异构是领域共性难题。侯琛和牛培宇[86]综述了农业知识图谱的研究现状，提出高质量数据采集是知识图谱构建的基础。Adebayo等[82]系统综述了数字技术在水产养殖供应链中的应用，发现多源数据采集的自动化与标准化仍是关键瓶颈。
+在大模型语料构建方面，欧阳峥峥等[81]分析了中国农业大模型在数据治理方面的挑战，指出缺乏高质量领域语料是核心制约因素。赵春江[87]综述了农业知识智能服务技术，强调从原始数据到可用知识的端到端自动化链路的重要性。
+综上，现有工作分别覆盖抓取底座、相关度调度、深网与动态采集、治理与智能体评测，但较少从“发现—采集—结构化—治理—评测”的全链路视角给出面向农业场景的成本—收益框架。尤其在水产养殖领域，政务公告非结构化程度高、电商平台访问控制机制动态演进、学术文献版面复杂等独特痛点尚未得到系统性解决。本文从全链路视角综述垂直爬虫技术体系，重点阐明各技术环节在农业数据痛点中的针对性作用，并以水产养殖领域为场景映射加以说明。
+2　垂直领域爬虫的总体架构
+2.1　分层架构与模块边界
+垂直领域爬虫可抽象为"通用抓取骨架＋主题约束与领域抽取增强"的组合系统，整体框架如图1所示。工程上常采用分层解耦：（1）调度与管理层：维护URL前沿队列与站点预算，负责种子、优先级、去重、礼貌访问与失败恢复[1,3]。（2）采集与解析层：请求处理（连接复用、超时重试）以及DOM解析与链接抽取。（3）主题判别与收益评估层：计算页面相关度并为候选URL赋分，反馈到前沿队列以驱动抓取顺序[6-8]。（4）抽取与治理层：面向目标schema完成字段抽取、清洗、版本管理与审计留痕[43,44]。（5）存储与服务层：结构化数据入库、全文入检索、快照入对象存储，并通过统一API提供查询与统计服务。
+在农业领域，数据源层通常涵盖政务公告（如农业农村部渔业渔政管理局）、学术文献数据库（如CNKI、Semantic Scholar）、电商平台（如京东、淘宝的农产品频道）以及物联网数据接口等，多源异构特征显著。
+
+图1　垂直领域爬虫总体架构与数据流
+
+Fig.1　Overall architecture and data flow of vertical-domain crawler
+2.2　部署形态与可观测性
+抓取范围扩大时，常采用"中心调度＋采集节点"的分布式形态：中心侧维护全局前沿队列与去重索引，采集节点负责下载与初步抽取并回传状态[4,5]；通过一致性哈希或按host分片可降低跨节点URL转发成本。
+长期运行还需可观测性接口，如吞吐、响应码分布、站点级QPS、命中率与字段缺失率等。站点改版时，可基于日志与快照定位失效并回归测试；按站点分级进行降级或暂停，保障系统稳定性。
+3　关键技术与方法
+3.1　主题建模与相关度判别
+主题表示决定"抓什么"，并直接影响页面判别与URL调度。按工程复杂度可归纳为三类：①关键词与规则（BM25、TF-IDF等），适合粗筛[9]；②统计主题模型（LDA等），缓解词稀疏[10]；③语义向量（BERT、SBERT等），提升跨表达鲁棒性[11,12]。
+多数可落地系统采用"两级判别"：第一级以规则/BM25/TF-IDF等轻量模型快速粗筛，过滤明显无关页面；第二级以语义编码器（如BERT/SBERT）或学习排序模型进行精判，并融合锚文本上下文、URL token、父页得分与站点历史命中率等信号，将综合得分反馈到frontier指导抓取顺序[9,11,12,41,42]。在预算受限时，可通过蒸馏、量化或离线批处理降低在线推理成本。
+在水产养殖场景中，主题表示的构建尤为关键。领域关键词需覆盖品种名称（如“虹鳟”“帝王鲑”“大西洋鲑”）、病害名称（如“传染性胰脏坏死症”“白斑综合征”）、水质指标（如“溶解氧”“氨氮浓度”“pH值”）以及养殖参数（如“投饲率”“放养密度”）等多层概念。种子URL应涵盖农业农村部渔业渔政管理局、CNKI水产学科分类及学术检索API等权威站点，配合目标数据模式（如价格/产地/规格/日期等字段约束）构建白名单体系。除人工标注外，可采用弱监督、远程监督与主动学习降低冷启动成本；在线运行时需监测主题漂移与站点改版[8,36]。
+3.2　URL调度、去重与增量更新
+URL调度决定有限预算下的抓取收益。垂直任务多采用best-first策略：为未抓取URL计算先验得分并维护优先级队列，同时保留探索预算避免过度偏向少数站点[2,6,8]。增量重访需结合变化频率与收益，通过URL与内容去重降低冗余[13,15,16]。
+（1）Frontier组织与礼貌调度。将全局优先级与按host子队列结合：全局层选候选host，host层按并发与最小间隔发起请求[1,28]；在分布式场景中，可按host或域名进行任务分片，减少跨节点转发并避免重复抓取[4,5]。（2）URL评分与探索—利用折中。得分融合相关度（由父页与锚文本估计）、结构重要性（如PageRank/HITS[39,40]）以及新鲜度/新颖性三类信号[31]。（3）规范化与多层去重。典型方法包括shingling与MinHash、SimHash[15,37,38]，以及Bloom Filter等近似结构[16]，在超大规模场景下可在可控误差下显著降低内存开销。（4）增量更新。利用Last-Modified与ETag等条件请求减少无效传输[21]，当资源未变化时返回304，可显著降低带宽与目标站点压力。（5）失败回收与幂等写入。调度层应区分"可恢复失败"与"结构性失败"，并采用指数退避、熔断与人工回归测试闭环，数据落库遵循幂等upsert与版本化策略。
+3.3　深层网络与动态页面采集
+动态渲染与深层网络是垂直爬虫的主要失效点。工程上可采用"接口优先、渲染兜底"的采集闭环（见图2）：优先分析网络请求定位JSON接口并直接拉取[18,23]；接口难以定位时，使用无头浏览器执行脚本获取渲染后DOM，并以WebDriver等标准接口驱动交互[19,24]。
+
+图2　“接口优先、渲染兜底”的采集闭环
+
+Fig.2　API-first / rendering-fallback acquisition loop
+以水产养殖相关的农业电商平台为例，京东农资频道的商品列表通过前端脚本动态渲染生成，页面DOM依赖JavaScript执行后才可见，需采用无头浏览器（如DrissionPage或Playwright）进行渲染采集；而淘宝农产品频道提供基于mtop网关的H5数据接口，以JSON格式返回结构化数据，可在授权会话框架内通过接口参数适配方式获取，避免前端渲染开销，但需维护会话凭证的时效性。两者在采集策略上的根本差异体现了“接口优先、渲染兜底”原则在农业电商场景的实际指导价值：当数据源提供结构化API时优先走接口路径以降低资源开销与访问控制触发风险，仅在接口不可用或数据依赖前端计算时才启用渲染兜底。表单驱动深网入口可按“表单建模—查询生成—执行解析—去重合并—落库”闭环实现[17,20]。为控制状态爆炸，应设置预算（分页深度、参数组合上限）并在调度层执行。
+（1）接口发现与请求模板化。对SPA/Ajax站点，优先通过分析页面脚本与网络请求轨迹，抽取XHR/fetch请求的URL、参数与分页规则，并将其抽象为"请求模板+参数域"[23]。接口响应多以JSON返回，便于直接映射到目标schema并进行字段校验。（2）渲染兜底与状态空间约束。当接口难以定位或数据依赖前端计算时，可引入无头浏览器渲染[24]，对交互深度、可见元素集合与DOM哈希去重设置约束，并屏蔽与采集无关的媒体与第三方脚本。（3）可复现与回归测试。建议为关键站点保留"请求—响应—快照"三元组，并将抽取规则版本与快照绑定，在站点改版后通过回放快照快速定位失效规则[20]。
+3.4　访问控制、礼貌访问与合规治理
+垂直爬虫应以“可持续运行”为目标：采集前遵循robots.txt[22]；采集中按站点预算控制并发，对429、5xx采用指数退避[21]；采集后保留来源链路与版本信息。在水产养殖情报采集中，不同数据源的风控强度呈现显著梯度差异：学术平台（如CNKI）部署人机验证与异步渲染[25]，需结合浏览器自动化与会话管理策略适配；电商平台（如淘宝）采用基于会话令牌的签名校验机制，令牌有效期较短，需在合规会话框架内通过分级凭证管理策略维持采集连续性；政务站点（如农业农村部）访问控制较弱但页面结构频繁改版，需通过快照回放与规则版本绑定实现快速适配。针对上述差异化风控强度，采集系统需在调度层实现按数据源分级的策略路由（见第4节实证分析）。
+合规方面，工程上可采用"最小化采集"原则：仅采集任务必需字段，避免采集或长期保存个人敏感信息；对必须处理的个人信息，需在存储与访问层实施加密、权限控制与审计日志。IETF人工智能使用偏好工作组提出可通过Content-Usage响应头声明AI训练用途的允许或禁止[63,68]，高强度采集宜优先使用公开接口或协商授权。
+3.5　字段抽取、质量控制与可追溯
+字段抽取可采用规则与学习方法结合：对结构稳定页面优先XPath或CSS模板，对半结构化页面可借鉴自动化包装器归纳（如RoadRunner[47]），对半结构化文本引入信息抽取模型[26,27,47]。利用schema.org等结构化数据标注[45,49]，可直接解析实体与属性映射到目标schema；JSON-LD[49]为结构化数据在Web环境下的交换提供了标准化表示，显著降低对页面布局依赖并提升抗改版能力。
+质量治理建议贯穿全链路：在采集侧记录来源URL、抓取时间、请求参数与规则/模型版本等元数据；在落库侧执行字段级校验（类型、范围、枚举、主键唯一性）与异常检测；在服务侧提供可追溯查询与抽样复核接口[43,44]。可结合W3C PROV数据模型[46]及其设计理念[48]、PROV-O本体[65]与C2PA内容凭证[64]进一步规范溯源元数据表达，使"采集—清洗—抽取—发布"全链路具备可验证的溯源记录。
+3.6　评测指标与基准设置
+垂直爬虫评测包括有效收获率（harvest rate）与查准率/召回率[6,8]、覆盖与多样性、新鲜度以及资源与合规指标（QPS、失败率、429/403比例）[13,31]。在网页智能体评测中，常用任务成功率、步骤成功率以及交互步数与调用费用等指标[51-56,59]。典型基准见表1。
+表1　典型网页智能体评测基准概览
+
+Table 1　Overview of typical web agent evaluation benchmarks
+基准
+交互形态
+评测对象
+主要指标
+Mind2Web[51]
+真实网站任务+轨迹
+通用Web Agent
+任务完成率、步骤成功率
+WebArena[52]
+可复现网站环境
+端到端自主浏览
+任务成功率、功能正确性
+VisualWebArena[55]
+多模态网页任务
+多模态Web Agent
+任务成功率、视觉定位
+AutoWebGLM[53]
+双语导航任务
+浏览代理+HTML简化
+任务成功率、动作步数
+AgentBench[54]
+多环境综合
+LLM-as-Agent
+成功率、推理能力
+BrowserGym[57]
+统一接口
+跨基准对比
+多基准成绩、鲁棒性
+
+3.7　智能体化垂直爬虫
+SPA与异步接口普及后，登录、筛选等交互使"模板＋规则"维护成本上升。LLM网页智能体可在受限动作集合下生成任务轨迹，将深网采集扩展为"交互式语义导航"[51,52,60]。ReAct[59]将推理与行动交替执行，Toolformer[60]使模型自主调用外部工具，为智能体赋予了规划与执行能力。工程上宜采用"规则主干＋智能体插件"，智能体只覆盖少量高价值、强交互入口。
+（1）分层混合架构。将主干发现—抓取—抽取链路与交互采集插件解耦：静态页走HTTP，渲染与登录入口触发智能体。稳定后固化为规则脚本，以提升吞吐并降低长期维护成本。（2）观测建模与动作约束。观测可由DOM、可访问性树与截图构成。近期研究趋向采用"视觉+结构"融合，通过Set-of-Mark（SoM）等方式标注候选可交互元素并与DOM节点对齐[57]。两类智能体对比如表2所示。（3）成本模型与调度耦合。渲染与推理成本较高，应在调度层做成本—收益决策，对重复任务通过轨迹缓存与动作宏降低交互次数。（4）安全与风控。采用白名单或只读模式、动作校验与结果断言，对高风险操作引入人工复核，防范幻觉动作与页面提示注入风险。
+表2　文本结构智能体与多模态智能体对比
+
+Table 2　Comparison of text-structural and multimodal web agents
+项目
+文本/结构智能体
+多模态智能体
+适用建议
+观测输入
+DOM、AT、HTML
+截图+DOM对齐
+—
+优势
+解析稳定、成本低、结构定位精确
+覆盖强视觉交互、抗改版
+—
+局限
+对强视觉不友好
+推理成本高、对截图质量敏感
+—
+适用场景
+结构稳定站点、高频任务
+登录、弹窗等高门槛步骤
+规则主干+智能体插件
+
+3.8　面向大模型的数据采集
+面向大模型预训练，网页语料采集强调"质量驱动调度"，避免"先全量抓取再大量丢弃"。可引入质量得分（可读性、信息密度、近重复度等），将调度从"相关优先"扩展为"相关×质量×新鲜度"多目标优化[61]。FineWeb[62]与RefinedWeb[66]等工作表明严格过滤与去重后的网页数据可支撑高质量预训练；Dolma通过多源混合与可复现工具链，体现了"开放语料+透明流程"的价值[67]。
+在水产养殖等农业垂直领域，面向“范蠡”等领域大模型的语料采集面临更高要求：学术文献PDF版面复杂（双栏排版、跨栏表格、化学方程式与统计公式），传统解析工具段落乱序率高、表格丢失严重，必须引入深度版面分析技术（如MinerU）并叠加后处理规则确保内容完整提取[81,87]；专业术语（如“传染性胰脏坏死症IPN”“非离子氨NH₃-N”）覆盖度直接影响下游模型的领域问答与推理能力；CoT推理链的注入旨在引导模型在回答“如何快速获取某病害防治方案”“不同养殖密度下溶解氧变化趋势”等实际渔业问题时呈现更清晰的推理过程。因此，垂直爬虫的判别模块宜从“主题相关”扩展为“主题相关＋信息密度/教育价值”的双重评估，并将质量标签随数据一起入库，用于后续建模、抽样与审计。在语料治理方面，还需具备解析与尊重站点机器可读使用政策的能力[22,63]。
+综合以上分析，不同技术路线在农业数据源上的适用性呈现显著差异：规则模板方案在结构稳定的政务站点上最为可靠且维护成本最低；“接口优先”策略在提供结构化API的数据源上效率最高，但接口变更频繁导致维护成本上升；无头浏览器渲染适用范围最广但资源开销最大，适合作为兜底手段；LLM网页智能体在强交互入口展现潜力，但受限于推理成本与稳定性，目前更宜作为规则主干的补充。从研究局限看：（1）缺乏面向农业场景的标准化采集评测基准，方法间横向比较受限于各自实验设定；（2）中文农业文档版面分析的公开标注数据匮乏，模型泛化能力验证受限；（3）智能体化采集在长期运行的成本控制与稳定性方面缺乏系统性研究；（4）合规治理工程化标准仍在制定中（如IETF AI Preferences草案[63,68]），缺乏成熟工具链支撑。上述局限构成当前研究的主要瓶颈，也为第5节展望提供了依据。
+4　典型场景映射：水产养殖情报采集适配分析
+本节以水产养殖情报采集与分析系统为典型场景，示例性说明第2—3节综述技术在政策通知、学术文献与电商价格三类采集任务中的适配路径与面临的典型问题，而非对完整工程系统进行全面验证。下文以多源采集、会话凭证管理、版面解析与语料构建四个环节为例展开。
+4.1　系统架构与多源采集
+系统覆盖5个异构数据源，各数据源通过独立适配器接入。表3对比了五源采集技术方案与第2—3节综述技术的映射关系。
+表3　水产养殖多源采集模块技术对比
+
+Table 3　Technical comparison of multi-source collection modules for aquaculture
+数据源
+采集技术
+访问控制
+凭证管理
+CNKI
+Selenium+Edge
+人机验证
+无
+MOA
+Requests/Playwright
+无/AES加密
+无
+Semantic Scholar
+REST API
+频率限制
+无
+京东
+DrissionPage/Playwright
+登录验证
+无
+淘宝
+H5接口适配采集
+会话签名校验
+分级管理
+
+在初步验证中，系统采集了1 664条电商快照、20条渔业渔政通知与150条线下批发市场价格记录等多源数据。需要指出，上述样本规模有限（尤其政务通知仅20条），主要用于说明各采集模块的技术映射路径与适配方式，尚不足以支撑泛化性结论。
+4.2　会话凭证分级管理策略验证
+农业电商平台普遍采用会话令牌机制，令牌有效期较短。为映射第3.4节“分级凭证管理”策略，系统在授权会话框架内实现静默刷新（L1）→会话重建（L2）→熔断降级（L3）三级策略，以20页请求为负载进行小规模验证（表4）。
+表4　会话凭证分级管理策略验证结果
+Table 4　Validation results of tiered credential management strategy
+配置
+启用层级
+页面成功率/%
+说明
+Level 0
+无凭证管理
+60
+令牌过期即失败
+Level 1
+仅静默刷新
+75
++15百分点
+Level 2
++浏览器重建
+90
+覆盖Cookie本身过期
+Level 3
+全部层级
+90
+任务未因凭证失效中断
+
+在当前小规模测试负载下，各层级凭证管理策略逐级提升了页面获取成功率，L3熔断降级在单页成功率不变的前提下避免了任务中断（表4）。该分级策略为存在类似会话管理需求的农业数据采集场景提供了一种可参考的设计思路，但在更大负载与不同平台上的有效性仍需进一步验证。
+4.3　学术文献深度版面解析
+水产养殖中文学术论文普遍存在双栏排版、跨栏表格与嵌入式公式等复杂版面，映射了第3.8节讨论的深度版面分析需求。系统集成MinerU[88]版面检测引擎并叠加后处理规则，以30篇论文为测试集进行小规模对比（表5）。
+表5　PDF解析工具全文可用率对比
+
+Table 5　Full-text usability comparison of PDF parsing tools
+工具
+段落完整率均值/%
+全文可用率/%
+MinerU（增强）
+90.5
+100.0
+MinerU（原始）
+—
+86.7
+PyMuPDF
+73.2
+26.7
+pdfplumber
+70.0
+36.7
+CNKI TXT导出
+62.0
+23.3
+注：全文可用率判定标准为段落完整率≥80%且乱码噪声率≤2%。
+在当前30篇测试样本上，MinerU增强管线的全文可用率与标题识别F1均居各工具之首，后处理规则贡献了13.3个百分点的增益。初步表明“深度版面分析＋规则后处理”管线在小样本条件下对农业复杂版面文献具有一定适用性，但30篇样本不足以支撑泛化性结论，更大规模与更多版面类型的验证仍属必要。
+4.4　SFT语料构建流程示例
+为示例说明第3.8节讨论的领域语料构建流程，系统以MinerU解析输出为输入，通过5种问答模板自动构建SFT语料852条（经去重过滤），其中约2/3差异化注入CoT推理链。由2名评估人员对分层抽样的100条语料独立标注（Cohen’s Kappa = 0.82），三维均分为0.87/1.0。以Qwen2.5-7B为基座，按8:1:1划分训练/验证/测试集进行QLoRA微调（rank=64，lr=2e-4，3 epoch），测试集ROUGE-1 F1与BERTScore F1较未微调基座均有小幅提升，但样本量有限且仅对比单一基座，尚不足以得出泛化性结论，该流程可为农业大模型的领域知识增强提供参考路径。
+5　总结与展望
+本文以农业垂直领域的数据获取需求为牵引，系统综述了面向农业场景的Web数据智能采集技术。在通用爬虫骨架上，主题判别与收益驱动调度解决“抓什么、何时刷新”的优先级问题，“接口优先、渲染兜底”闭环应对深层网络与动态页面的失效风险，访问控制合规与溯源数据治理保障长期运行的稳定性与数据可追溯性，大语言模型网页智能体则为强交互入口提供了降低维护成本的新路径。“规则主干＋智能体插件”混合范式在工程可维护性与采集覆盖度之间取得了一定折中。水产养殖场景映射在多源采集成功率、版面解析完整度与领域微调语料质量等方面初步呈现了上述技术框架在农业场景下的落地路径。总体而言，面向农业垂直领域的相关技术已呈现出由调度、采集、治理与语料化构成的较清晰技术主线，但在农业非结构化文档的鲁棒解析、多模态理解与自适应调度、合规工程化以及领域语料的规模化治理等方面仍存在较大提升空间。
+未来可重点关注：（1）多模态页面理解与抽取：融合规则、结构化标注与预训练模型，降低改版与迁移成本，实现农业非结构化文档的高保真解析；（2）自适应调度与持续学习：将收益、覆盖、成本与合规风险纳入统一目标，在线校准农业数据源的采集策略；（3）智能体插件与可执行评测：补齐强交互入口，提升回放与回归能力，支撑农业电商、政务数据库等复杂站点的自动化采集；（4）合规与隐私工程化：加强访问控制、数据最小化与审计追踪，解析并尊重机器可读使用偏好[63,68]；（5）面向农业垂直大模型的语料治理：构建从原始采集到标准化SFT语料的端到端自动化管线，结合多源文献扩充术语覆盖，提升领域模型的专业推理能力[81,87]。
+参　考　文　献
+[1]　OLSTON C, NAJORK M. Web crawling[J]. Foundations and Trends in Information Retrieval, 2010, 4(3): 175-246.
+[2]　CHO J, GARCIA-MOLINA H, PAGE L. Efficient crawling through URL ordering[J]. Computer Networks and ISDN Systems, 1998, 30(1-7): 161-172.
+[3]　HEYDON A, NAJORK M. Mercator: A scalable, extensible web crawler[J]. World Wide Web, 1999, 2(4): 219-229.
+[4]　SHKAPENYUK V, SUEL T. Design and implementation of a high-performance distributed Web crawler[C]//Proceedings of the 18th ICDE. 2002: 357-368.
+[5]　BOLDI P, CODENOTTI B, SANTINI M, et al. UbiCrawler: A scalable fully distributed Web crawler[J]. Software: Practice and Experience, 2004, 34(8): 711-726.
+[6]　CHAKRABARTI S, VAN DEN BERG M, DOM B. Focused crawling: A new approach to topic-specific Web resource discovery[J]. Computer Networks, 1999, 31(11-16): 1623-1640.
+[7]　DILIGENTI M, COETZEE F, LAWRENCE S, et al. Focused crawling using context graphs[C]//Proceedings of the 26th VLDB. 2000: 527-534.
+[8]　MENCZER F, PANT G, SRINIVASAN P. Topical Web crawlers: Evaluating adaptive algorithms[J]. ACM Transactions on Internet Technology, 2004, 4(4): 378-419.
+[9]　ROBERTSON S, ZARAGOZA H. The probabilistic relevance framework: BM25 and beyond[J]. Foundations and Trends in Information Retrieval, 2009, 3(4): 333-389.
+[10]　BLEI D M, NG A Y, JORDAN M I. Latent Dirichlet allocation[J]. Journal of Machine Learning Research, 2003, 3: 993-1022.
+[11]　DEVLIN J, CHANG M W, LEE K, et al. BERT: Pre-training of deep bidirectional transformers for language understanding[C]//Proceedings of NAACL-HLT. 2019: 4171-4186.
+[12]　REIMERS N, GUREVYCH I. Sentence-BERT: Sentence embeddings using Siamese BERT-networks[C]//Proceedings of EMNLP-IJCNLP. 2019: 1825-1835.
+[13]　CHO J, GARCIA-MOLINA H. Effective page refresh policies for Web crawlers[J]. ACM Transactions on Database Systems, 2003, 28(4): 390-426.
+[14]　NAJORK M, WIENER J L. Breadth-first search crawling yields high-quality pages[C]//Proceedings of WWW. 2001: 114-118.
+[15]　MANKU G S, JAIN A, SARMA A D. Detecting near-duplicates for Web crawling[C]//Proceedings of WWW. 2007: 141-150.
+[16]　BLOOM B H. Space/time trade-offs in hash coding with allowable errors[J]. Communications of the ACM, 1970, 13(7): 422-426.
+[17]　RAGHAVAN S, GARCIA-MOLINA H. Crawling the hidden Web[C]//Proceedings of the 27th VLDB. 2001: 129-138.
+[18]　MADHAVAN J, KO D, KOT L, et al. Google's Deep-Web crawl[J]. Proceedings of the VLDB Endowment, 2008, 1(2): 1241-1252.
+[19]　MESBAH A, VAN DEURSEN A, LENSELINK S. Crawling Ajax-based Web applications through dynamic analysis of user interface state changes[J]. ACM Transactions on the Web, 2012, 6(1): 1-30.
+[20]　HERNÁNDEZ I, RIVERO C R, RUIZ D, et al. A survey of deep-web crawling[J]. World Wide Web, 2019, 22(4): 1577-1610.
+[21]　FIELDING R, NOTTINGHAM M, RESCHKE J. HTTP Semantics[S]. RFC 9110. IETF, 2022.
+[22]　KOSTER M, ILLYES G, ZELLER H, et al. Robots Exclusion Protocol[S]. RFC 9309. IETF, 2022.
+[23]　BRAY T. The JavaScript Object Notation (JSON) Data Interchange Format[S]. RFC 8259. IETF, 2017.
+[24]　W3C. WebDriver[EB/OL]. (2018-06-05)[2026-01-06]. https://www.w3.org/TR/webdriver/.
+[25]　VON AHN L, BLUM M, HOPPER N J, et al. CAPTCHA: Using hard AI problems for security[C]//Advances in Cryptology—EUROCRYPT. 2003: 294-311.
+[26]　LAENDER A H F, RIBEIRO-NETO B, DA SILVA A S, et al. A brief survey of Web data extraction tools[J]. ACM SIGMOD Record, 2002, 31(2): 84-93.
+[27]　CHANG C H, KAYED M, GIRGIS M R, et al. A survey of Web information extraction systems[J]. IEEE Transactions on Knowledge and Data Engineering, 2006, 18(10): 1411-1428.
+[28]　CHO J, GARCIA-MOLINA H. Parallel crawlers[C]//Proceedings of WWW. 2002: 124-135.
+[29]　CHO J, GARCIA-MOLINA H. The evolution of the Web and implications for an incremental crawler[C]//Proceedings of the 26th VLDB. 2000: 200-209.
+[30]　EDWARDS J, MCCURLEY K S, TOMLIN J A. An adaptive model for optimizing performance of an incremental Web crawler[C]//Proceedings of WWW. 2001: 106-113.
+[31]　NTOULAS A, CHO J, OLSTON C. What's new on the Web? The evolution of the Web from a search engine perspective[C]//Proceedings of WWW. 2004: 1-12.
+[32]　LEE H T, LEONARD D, WANG X, et al. IRLbot: Scaling to 6 billion pages and beyond[J]. ACM Transactions on the Web, 2009, 3(3): 1-34.
+[33]　MOHR G, STACK M, RANITOVIC I, et al. An introduction to Heritrix: An open source archival quality Web crawler[EB/OL]. (2004)[2026-01-06]. https://crawler.archive.org/Mohr-et-al-2004.pdf.
+[34]　CAFARELLA M J, CUTTING D R. Building Nutch: Open source search[J]. ACM Queue, 2004, 2(2): 54-61.
+[35]　DAVISON B D. Topical locality in the Web[C]//Proceedings of SIGIR. 2000: 272-279.
+[36]　LIU T Y. Learning to rank for information retrieval[J]. Foundations and Trends in Information Retrieval, 2009, 3(3): 225-331.
+[37]　BRODER A Z. On the resemblance and containment of documents[C]//Proceedings of the Compression and Complexity of Sequences. 1997: 21-29.
+[38]　CHARIKAR M S. Similarity estimation techniques from rounding algorithms[C]//Proceedings of STOC. 2002: 380-388.
+[39]　BRIN S, PAGE L. The anatomy of a large-scale hypertextual Web search engine[J]. Computer Networks and ISDN Systems, 1998, 30(1-7): 107-117.
+[40]　KLEINBERG J M. Authoritative sources in a hyperlinked environment[J]. Journal of the ACM, 1999, 46(5): 604-632.
+[41]　VASWANI A, SHAZEER N, PARMAR N, et al. Attention is all you need[C]//NeurIPS. 2017: 5998-6008.
+[42]　MIKOLOV T, SUTSKEVER I, CHEN K, et al. Distributed representations of words and phrases and their compositionality[C]//NeurIPS. 2013: 3111-3119.
+[43]　WANG R Y, STRONG D M. Beyond accuracy: What data quality means to data consumers[J]. Journal of Management Information Systems, 1996, 12(4): 5-33.
+[44]　BATINI C, SCANNAPIECO M. Data Quality: Concepts, Methodologies and Techniques[M]. Berlin: Springer, 2006.
+[45]　GUHA R V, BRICKLEY D, MACBETH S. Schema.org: Evolution of structured data on the Web[J]. Communications of the ACM, 2016, 59(2): 44-51.
+[46]　W3C. PROV-DM: The PROV Data Model[EB/OL]. (2013-04-30)[2026-01-06]. https://www.w3.org/TR/prov-dm/.
+[47]　CRESCENZI V, MECCA G, MERIALDO P. RoadRunner: Towards automatic data extraction from large Web sites[C]//Proceedings of the 27th VLDB. 2001: 109-118.
+[48]　MOREAU L, GROTH P, CHENEY J, et al. The rationale of PROV[J]. Web Semantics, 2015, 35: 235-257.
+[49]　W3C. JSON-LD 1.1[EB/OL]. (2020-07-16)[2026-01-06]. https://www.w3.org/TR/json-ld11/.
+[50]　ILIOU C, KOSTOULAS T, TSIKRIKA T, et al. Detection of advanced Web bots by combining Web logs with mouse behavioural biometrics[J]. Digital Threats, 2021, 2(3): 1-26.
+[51]　DENG X, GU Y, ZHENG B, et al. Mind2Web: Towards a Generalist Agent for the Web[C]//NeurIPS. 2023.
+[52]　ZHOU S, XU F F, ZHU H, et al. WebArena: A Realistic Web Environment for Building Autonomous Agents[C]//ICLR. 2024.
+[53]　LAI H, LIU X, IONG I L, et al. AutoWebGLM: A Large Language Model-based Web Navigating Agent[C]//KDD. 2024: 5295-5306.
+[54]　LIU X, LAI H, YU H, et al. AgentBench: Evaluating LLMs as Agents[C]//ICLR. 2024.
+[55]　KOH J Y, LO R, JANG L K, et al. VisualWebArena: Evaluating Multimodal Agents on Realistic Visual Web Tasks[C]//ACL. 2024: 881-905.
+[56]　ZHENG B, GOU B, KIL J, et al. GPT-4V(ision) is a Generalist Web Agent, if Grounded[C]//ICML. PMLR, 2024, 235: 61349-61385.
+[57]　YANG J, ZHANG H, LI F, et al. Set-of-Mark Prompting Unleashes Extraordinary Visual Grounding in GPT-4V[EB/OL]. arXiv:2310.11441, 2023[2026-01-06]. https://arxiv.org/abs/2310.11441.
+[58]　DE CHEZELLES T L S, GASSE M, LACOSTE A, et al. The BrowserGym Ecosystem for Web Agent Research[J/OL]. Transactions on Machine Learning Research, 2025[2026-01-06]. https://openreview.net/forum?id=5298fKGmv3.
+[59]　YAO S, ZHAO J, YU D, et al. ReAct: Synergizing Reasoning and Acting in Language Models[C]//ICLR. 2023.
+[60]　SCHICK T, DWIVEDI-YU J, DESSÌ R, et al. Toolformer: Language Models Can Teach Themselves to Use Tools[C]//NeurIPS. 2023.
+[61]　YU S, LIU Z, XIONG C. Craw4LLM: Efficient Web Crawling for LLM Pretraining[C]//Findings of ACL. 2025: 13843-13851.
+[62]　PENEDO G, KYDLÍČEK H, BEN ALLAL L, et al. The FineWeb Datasets: Decanting the Web for the Finest Text Data at Scale[C]//NeurIPS Datasets and Benchmarks Track. 2024.
+[63]　ILLYES G, THOMSON M. Associating AI Usage Preferences with Content in HTTP[EB/OL]. draft-ietf-aipref-attach-04. IETF, 2025[2026-01-06]. https://datatracker.ietf.org/doc/draft-ietf-aipref-attach/.
+[64]　C2PA. C2PA Technical Specification (Version 2.2)[EB/OL]. 2025-05[2026-01-06]. https://c2pa.org/specifications/specifications/2.2/specs/C2PA_Specification.html.
+[65]　LEBO T, SAHOO S, MCGUINNESS D, et al. PROV-O: The PROV Ontology[S/OL]. W3C Recommendation, 2013[2026-01-06]. https://www.w3.org/TR/prov-o/.
+[66]　PENEDO G, MALARTIC Q, HESSLOW D, et al. The RefinedWeb Dataset for Falcon LLM[C]//NeurIPS Datasets and Benchmarks Track. 2023.
+[67]　SOLDAINI L, KINNEY R, BHAGIA A, et al. Dolma: an Open Corpus of Three Trillion Tokens for Language Model Pretraining Research[C]//ACL. 2024: 15725-15788.
+[68]　KELLER P, THOMSON M. A Vocabulary For Expressing AI Usage Preferences[EB/OL]. draft-ietf-aipref-vocab-05. IETF, 2025[2026-01-06]. https://datatracker.ietf.org/doc/draft-ietf-aipref-vocab/.
+[69]　RASTEGARI H, NADI F, LAM S S, et al. Internet of Things in aquaculture: A review[J]. Smart Agricultural Technology, 2023, 4: 100187.
+[70]　LI P, HAN H, ZHANG S, et al. Reviews on the development of digital intelligent fisheries technology in aquaculture[J]. Aquaculture International, 2025, 33: 191.
+[71]　WANG C, LI Z, WANG T, et al. Intelligent fish farm—the future of aquaculture[J]. Aquaculture International, 2021, 29: 2681-2711.
+[72]　胡金有, 王靖杰, 张小栓, 等. 水产养殖信息化关键技术研究现状与趋势[J]. 农业机械学报, 2015, 46(7): 251-263.
+HU Jinyou, WANG Jingjie, ZHANG Xiaoshuan, et al. Research Status and Development Trends of Information Technologies in Aquacultures[J]. Transactions of the Chinese Society for Agricultural Machinery, 2015, 46(7): 251-263. (in Chinese with English abstract) doi: 10.6041/j.issn.1000-1298.2015.07.037
+[73]　李道亮, 王帅星, 王聪. 柔性可穿戴传感技术在智慧渔业中的应用进展[J]. 农业工程学报, 2023, 39(13): 1-13.
+LI Daoliang, WANG Shuaixing, WANG Cong. Application of flexible wearable sensing technology in smart fishery[J]. Transactions of the Chinese Society of Agricultural Engineering (Transactions of the CSAE), 2023, 39(13): 1-13. (in Chinese with English abstract) doi: 10.11975/j.issn.1002-6819.202304142
+[74]　农业农村部渔业渔政管理局. 2024年全国渔业经济统计公报[R]. 北京: 农业农村部, 2025.
+[75]　中共中央, 国务院. 关于学习运用"千万工程"经验有力有效推进乡村全面振兴的意见[Z]. 北京: 中国政府网, 2024.
+[76]　农业农村部, 中央网络安全和信息化委员会办公室. 数字农业农村发展规划（2019—2025年）[Z]. 北京: 中国政府网, 2020.
+[77]　李道亮, 刘畅. 人工智能在水产养殖中研究应用分析与未来展望[J]. 智慧农业(中英文), 2020, 2(3): 1-20.
+LI Daoliang, LIU Chang. Recent Advances and Future Outlook for Artificial Intelligence in Aquaculture[J]. Smart Agriculture, 2020, 2(3): 1-20. (in Chinese with English abstract) doi: 10.12133/j.smartag.2020.2.3.202004-SA007
+[78]　刘晃, 刘世晶. 智慧渔业技术发展现状与展望[J]. 大连海洋大学学报, 2025, 40(4): 541-551.
+LIU Huang, LIU Shijing. The current development status and future prospects of smart fisheries technology: a review[J]. Journal of Dalian Ocean University, 2025, 40(4): 541-551. (in Chinese with English abstract) doi: 10.16535/j.cnki.dlhyxb.2025-183
+[79]　麻志宏, 赵天昊, 陈雨泽, 等. 智慧渔业无人养殖工厂数智技术体系研究综述[J]. 农业机械学报, 2025, 56(10): 1-19.
+MA Zhihong, ZHAO Tianhao, CHEN Yuze, et al. Towards Smart Fishery: Application Status and Prospects of Digital-intelligent Technology System in Unmanned Aquaculture Factories[J]. Transactions of the Chinese Society for Agricultural Machinery, 2025, 56(10): 1-19. (in Chinese with English abstract) doi: 10.6041/j.issn.1000-1298.2025.10.001
+[80]　国家数字渔业创新中心. 范蠡大模型1.0发布暨新质生产力推动京津冀现代渔业发展研讨会[EB/OL]. 中国农业大学新闻网, (2024-06-18)[2026-03-15]. https://news.cau.edu.cn/art/2024/6/18/art_10867_1041761.html.
+[81]　欧阳峥峥, 马毓聪, 寇远涛, 等. 中国农业大模型数据治理、核心技术与应用挑战[J]. 农业工程学报, 2025, 41(24): 153-162.
+OUYANG Zhengzheng, MA Yucong, KOU Yuantao, et al. Data governance, core technologies, and application challenges of China's agricultural large models[J]. Transactions of the Chinese Society of Agricultural Engineering (Transactions of the CSAE), 2025, 41(24): 153-162. (in Chinese with English abstract) doi: 10.11975/j.issn.1002-6819.202505226
+[82]　ADEBAYO I T, AJIBOLA S, AHMAD A, et al. Understanding the application of digital technologies in aquaculture supply chains[J]. Aquaculture International, 2025, 33: 397.
+[83]　FERNANDES S, DMELLO A. Artificial intelligence in the aquaculture industry: Current state, challenges and future directions[J]. Aquaculture, 2025, 598: 742048.
+[84]　穆维松, 刘天琪, 苗子溦, 等. 知识图谱技术及其在农业领域应用研究进展[J]. 农业工程学报, 2023, 39(16): 1-12.
+MU Weisong, LIU Tianqi, MIAO Ziwei, et al. Research progress on knowledge graph technology and its application in agriculture[J]. Transactions of the Chinese Society of Agricultural Engineering (Transactions of the CSAE), 2023, 39(16): 1-12. (in Chinese with English abstract) doi: 10.11975/j.issn.1002-6819.202210028
+[85]　吴华瑞, 郭威, 邓颖, 等. 农业文本语义理解技术综述[J]. 农业机械学报, 2022, 53(5): 1-16.
+WU Huarui, GUO Wei, DENG Ying, et al. Review of Semantic Analysis Techniques of Agricultural Texts[J]. Transactions of the Chinese Society for Agricultural Machinery, 2022, 53(5): 1-16. (in Chinese with English abstract) doi: 10.6041/j.issn.1000-1298.2022.05.001
+[86]　侯琛, 牛培宇. 农业知识图谱技术研究现状与展望[J]. 农业机械学报, 2024, 55(6): 1-17.
+HOU Chen, NIU Peiyu. Review of Research Status and Prospects of Agricultural Knowledge Graphs[J]. Transactions of the Chinese Society for Agricultural Machinery, 2024, 55(6): 1-17. (in Chinese with English abstract) doi: 10.6041/j.issn.1000-1298.2024.06.001
+[87]　赵春江. 农业知识智能服务技术综述[J]. 智慧农业(中英文), 2023, 5(2): 126-148.
+ZHAO Chunjiang. Agricultural Knowledge Intelligent Service Technology: A Review[J]. Smart Agriculture, 2023, 5(2): 126-148. (in Chinese with English abstract) doi: 10.12133/j.smartag.SA202306002
+[88]　WANG B, XU C, ZHAO X, et al. MinerU: An open-source solution for precise document content extraction[EB/OL]. arXiv:2409.18839, 2024[2026-01-06]. https://arxiv.org/abs/2409.18839.

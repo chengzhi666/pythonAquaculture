@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from mineru_parser import (
     ParseResult,
     AvailabilityReport,
+    _apply_postprocessing,
     parse_pdf_with_mineru,
     parse_with_pymupdf,
     parse_with_pdfplumber,
@@ -33,9 +34,7 @@ from mineru_parser import (
     evaluate_availability,
 )
 
-DEFAULT_PDF_DIR = Path(
-    r"C:\Users\qiaoruo\PycharmProjects\pythonAquaculture\test_pdfs"
-)
+DEFAULT_PDF_DIR = Path(__file__).resolve().parent / "test_pdfs"
 METHODS = ["mineru_raw", "mineru_enhanced", "pymupdf", "pdfplumber", "cnki_txt"]
 AVAILABILITY_THRESHOLD = 0.85
 
@@ -76,9 +75,25 @@ def compare_one(
     rows = []
     pdf_str = str(pdf_path)
 
-    # MinerU 只调一次底层解析，通过开关得到 raw / enhanced 两份结果
+    # MinerU 底层只跑一次；增强版只在 raw markdown 上执行规则后处理，方便 Ubuntu 现场演示。
     mineru_raw = parse_pdf_with_mineru(pdf_str, apply_postprocessing=False)
-    mineru_enhanced = parse_pdf_with_mineru(pdf_str, apply_postprocessing=True)
+    if mineru_raw.error:
+        mineru_enhanced = ParseResult(
+            pdf_path=pdf_str,
+            markdown="",
+            layout_elements=[],
+            parse_time_s=mineru_raw.parse_time_s,
+            method="mineru",
+            error=mineru_raw.error,
+        )
+    else:
+        mineru_enhanced = ParseResult(
+            pdf_path=pdf_str,
+            markdown=_apply_postprocessing(mineru_raw.markdown),
+            layout_elements=mineru_raw.layout_elements,
+            parse_time_s=mineru_raw.parse_time_s,
+            method="mineru",
+        )
 
     parsers: list[tuple[str, ParseResult]] = [
         ("mineru_raw", mineru_raw),
@@ -214,6 +229,12 @@ def main() -> None:
         default="./results",
         help="结果输出目录（默认 ./results）",
     )
+    parser.add_argument(
+        "--max-pdfs",
+        type=int,
+        default=0,
+        help="最多解析多少篇 PDF；0 表示全部（默认 0）",
+    )
     args = parser.parse_args()
 
     pdf_dir = Path(args.pdf_dir).expanduser().resolve()
@@ -222,6 +243,8 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     pdfs = discover_pdfs(pdf_dir)
+    if args.max_pdfs > 0:
+        pdfs = pdfs[: args.max_pdfs]
     print(f"找到 {len(pdfs)} 篇 PDF，开始对比实验...\n")
 
     all_rows: list[dict] = []
@@ -256,7 +279,8 @@ def main() -> None:
     print(f"汇总统计已保存：{summary_path}")
 
     # 统计 MinerU 可用篇数
-    mineru_stats = summary.get("mineru", {})
+    # Prefer the postprocessed MinerU result in the final demo summary.
+    mineru_stats = summary.get("mineru_enhanced") or summary.get("mineru_raw", {})
     available = mineru_stats.get("available_papers", 0)
     total = mineru_stats.get("total_papers", len(pdfs))
     print(f"\nMinerU 可用率：{available}/{total} = {available/total:.1%}（论文目标：96.7%）")

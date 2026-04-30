@@ -160,6 +160,163 @@ def _salmon_title_like_patterns() -> tuple[str, str, str, str]:
     )
 
 
+def _get_bounded_int_arg(name: str, default: int, lower: int, upper: int) -> int:
+    """从 query string 读取整数参数，异常时回退到默认值。"""
+    raw = request.args.get(name, default)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = default
+    return max(lower, min(value, upper))
+
+
+def _round_or_none(value, digits: int = 2):
+    if value is None:
+        return None
+    return round(float(value), digits)
+
+
+def _weighted_avg_from_rows(rows: list[dict]) -> float | None:
+    numeric_rows = [row for row in rows if row.get("avg_price") is not None and row.get("count")]
+    total_count = sum(int(row.get("count") or 0) for row in numeric_rows)
+    if total_count <= 0:
+        return None
+    weighted_sum = sum(float(row["avg_price"]) * int(row.get("count") or 0) for row in numeric_rows)
+    return round(weighted_sum / total_count, 2)
+
+
+def _spread_from_rows(rows: list[dict]) -> float | None:
+    values = [float(row["avg_price"]) for row in rows if row.get("avg_price") is not None]
+    if len(values) < 2:
+        return None
+    return round(max(values) - min(values), 2)
+
+
+def _get_dashboard_kpis(days: int = 30) -> dict:
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT ROUND(AVG(COALESCE(price_per_kg, price)), 2) AS avg_price,
+                       COUNT(*) AS sample_count
+                FROM product_snapshot
+                WHERE snapshot_time >= %s
+                  AND price IS NOT NULL
+                """,
+                (since,),
+            )
+            online_row = cur.fetchone() or {}
+
+            cur.execute(
+                """
+                SELECT ROUND(AVG(price), 2) AS avg_price,
+                       COUNT(*) AS sample_count
+                FROM offline_price_snapshot
+                WHERE snapshot_time >= %s
+                  AND price IS NOT NULL
+                """,
+                (since,),
+            )
+            offline_row = cur.fetchone() or {}
+
+            sample_tables = {
+                "products": ("SELECT COUNT(*) AS cnt FROM product_snapshot WHERE snapshot_time >= %s", since),
+                "offline": ("SELECT COUNT(*) AS cnt FROM offline_price_snapshot WHERE snapshot_time >= %s", since),
+                "intel": ("SELECT COUNT(*) AS cnt FROM intel_item WHERE fetched_at >= %s", since),
+                "papers": ("SELECT COUNT(*) AS cnt FROM paper_meta WHERE fetched_at >= %s", since),
+            }
+            sample_total = 0
+            for _, (sql, param) in sample_tables.items():
+                try:
+                    cur.execute(sql, (param,))
+                    sample_total += int((cur.fetchone() or {}).get("cnt", 0) or 0)
+                except Exception:
+                    continue
+
+        rows = []
+        if online_row.get("avg_price") is not None:
+            rows.append({"avg_price": online_row["avg_price"], "count": online_row.get("sample_count", 0)})
+        if offline_row.get("avg_price") is not None:
+            rows.append({"avg_price": offline_row["avg_price"], "count": offline_row.get("sample_count", 0)})
+
+        online_avg = _round_or_none(online_row.get("avg_price"))
+        offline_avg = _round_or_none(offline_row.get("avg_price"))
+        spread = None
+        if online_avg is not None and offline_avg is not None:
+            spread = round(abs(online_avg - offline_avg), 2)
+
+        return {
+            "window_days": days,
+            "monitor_avg_price": _weighted_avg_from_rows(rows),
+            "online_offline_spread": spread,
+            "sample_count_30d": sample_total,
+        }
+    finally:
+        conn.close()
+
+
+def _get_salmon_compare_data(cur, since: str, platform: str) -> list[dict]:
+    like1, like2, like3, like4 = _salmon_title_like_patterns()
+    online_sql = """
+        SELECT platform,
+               CASE
+                 WHEN platform = 'jd' THEN '京东线上'
+                 WHEN platform = 'taobao' THEN '淘宝线上'
+                 ELSE platform
+               END AS channel,
+               ROUND(AVG(COALESCE(price_per_kg, price)), 2) AS avg_price,
+               COUNT(*) AS count
+        FROM product_snapshot
+        WHERE snapshot_time >= %s
+          AND price IS NOT NULL
+          AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
+    """
+    online_params = [since, like1, like2, like3, like4]
+    if platform:
+        online_sql += " AND platform = %s"
+        online_params.append(platform)
+    online_sql += " GROUP BY platform ORDER BY avg_price DESC"
+    cur.execute(online_sql, online_params)
+    online_rows = [_serialise_row(r) for r in cur.fetchall()]
+
+    offline_sql = """
+        SELECT 'offline' AS platform,
+               '线下批发(MOA)' AS channel,
+               ROUND(AVG(price), 2) AS avg_price,
+               COUNT(*) AS count
+        FROM offline_price_snapshot
+        WHERE snapshot_time >= %s
+          AND price IS NOT NULL
+          AND (product_name_raw LIKE %s OR product_type = 'salmon_generic')
+    """
+    cur.execute(offline_sql, (since, like1))
+    offline_row = _serialise_row(cur.fetchone() or {})
+
+    rows = list(online_rows)
+    if offline_row.get("avg_price") is not None:
+        rows.append(offline_row)
+    return rows
+
+
+def _get_salmon_kpis(platform: str, days: int) -> dict:
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            rows = _get_salmon_compare_data(cur, since, platform)
+        return {
+            "window_days": days,
+            "platform": platform or "all",
+            "monitor_avg_price": _weighted_avg_from_rows(rows),
+            "online_offline_spread": _spread_from_rows(rows),
+            "sample_count_30d": sum(int(row.get("count") or 0) for row in rows),
+        }
+    finally:
+        conn.close()
+
+
 @app.route("/analysis/salmon")
 def salmon_analysis():
     return render_template("salmon_analysis.html")
@@ -169,34 +326,38 @@ def salmon_analysis():
 def salmon_price_trend():
     """三文鱼相关商品的线上价格趋势，用于论文 5.5 时序图。"""
     platform = request.args.get("platform", "").strip()
-    days = max(1, min(int(request.args.get("days", 60)), 365))
+    days = _get_bounded_int_arg("days", 60, 1, 365)
     since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     like1, like2, like3, like4 = _salmon_title_like_patterns()
 
     conn = get_conn()
     try:
-        with conn.cursor() as cur:
-            sql = """
-                SELECT DATE(snapshot_time) AS date,
-                       platform,
-                       ROUND(AVG(price), 2) AS avg_price,
-                       COUNT(*) AS count
-                FROM product_snapshot
-                WHERE snapshot_time >= %s
-                  AND price IS NOT NULL
-                  AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
-            """
-            params = [since, like1, like2, like3, like4]
-            if platform:
-                sql += " AND platform = %s"
-                params.append(platform)
-            sql += " GROUP BY DATE(snapshot_time), platform ORDER BY date, platform"
-            cur.execute(sql, params)
-            rows = [_serialise_row(r) for r in cur.fetchall()]
-            for row in rows:
-                if row.get("date") is not None:
-                    row["date"] = str(row["date"])
-            return jsonify({"days": days, "platform": platform or "all", "data": rows})
+        try:
+            with conn.cursor() as cur:
+                sql = """
+                    SELECT DATE(snapshot_time) AS date,
+                           platform,
+                           ROUND(AVG(price), 2) AS avg_price,
+                           COUNT(*) AS count
+                    FROM product_snapshot
+                    WHERE snapshot_time >= %s
+                      AND price IS NOT NULL
+                      AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
+                """
+                params = [since, like1, like2, like3, like4]
+                if platform:
+                    sql += " AND platform = %s"
+                    params.append(platform)
+                sql += " GROUP BY DATE(snapshot_time), platform ORDER BY date, platform"
+                cur.execute(sql, params)
+                rows = [_serialise_row(r) for r in cur.fetchall()]
+                for row in rows:
+                    if row.get("date") is not None:
+                        row["date"] = str(row["date"])
+                return jsonify({"days": days, "platform": platform or "all", "data": rows})
+        except Exception as exc:
+            logger.exception("salmon trend error: %s", exc)
+            return jsonify({"error": str(exc)}), 500
     finally:
         conn.close()
 
@@ -205,87 +366,67 @@ def salmon_price_trend():
 def salmon_distribution():
     """三文鱼案例的品种分布 + 产地分布。"""
     platform = request.args.get("platform", "").strip()
-    days = max(1, min(int(request.args.get("days", 30)), 365))
-    origin_limit = max(3, min(int(request.args.get("origin_limit", 6)), 10))
+    days = _get_bounded_int_arg("days", 30, 1, 365)
+    origin_limit = _get_bounded_int_arg("origin_limit", 6, 3, 10)
     since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     like1, like2, like3, like4 = _salmon_title_like_patterns()
     unknown_origin = "未知"
 
     conn = get_conn()
     try:
-        with conn.cursor() as cur:
-            species_sql = """
-                SELECT CASE
-                         WHEN title LIKE %s OR title LIKE %s THEN '帝王鲑'
-                         WHEN title LIKE %s THEN '虹鳟'
-                         ELSE '三文鱼'
-                       END AS species,
-                       COUNT(*) AS count
-                FROM product_snapshot
-                WHERE snapshot_time >= %s
-                  AND price IS NOT NULL
-                  AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
-            """
-            species_params = [like2, like3, like4, since, like1, like2, like3, like4]
-            if platform:
-                species_sql += " AND platform = %s"
-                species_params.append(platform)
-            species_sql += " GROUP BY species ORDER BY count DESC"
-            cur.execute(species_sql, species_params)
-            species_rows = [_serialise_row(r) for r in cur.fetchall()]
-            origin_sql = """
-                SELECT origin_standardized AS origin,
-                       COUNT(*) AS count
-                FROM product_snapshot
-                WHERE snapshot_time >= %s
-                  AND price IS NOT NULL
-                  AND origin_standardized IS NOT NULL
-                  AND origin_standardized != ''
-                  AND origin_standardized != %s
-                  AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
-            """
-            origin_params = [since, unknown_origin, like1, like2, like3, like4]
-            if platform:
-                origin_sql += " AND platform = %s"
-                origin_params.append(platform)
-            origin_sql += " GROUP BY origin ORDER BY count DESC, origin LIMIT %s"
-            origin_params.append(origin_limit)
-            cur.execute(origin_sql, origin_params)
-            origin_rows = [_serialise_row(r) for r in cur.fetchall()]
-            return jsonify(
-                {
-                    "days": days,
-                    "origin_limit": origin_limit,
-                    "platform": platform or "all",
-                    "species": species_rows,
-                    "origins": origin_rows,
-                }
-            )
+        try:
+            with conn.cursor() as cur:
+                species_sql = """
+                    SELECT CASE
+                             WHEN title LIKE %s OR title LIKE %s THEN '帝王鲑'
+                             WHEN title LIKE %s THEN '虹鳟'
+                             ELSE '三文鱼'
+                           END AS species,
+                           COUNT(*) AS count
+                    FROM product_snapshot
+                    WHERE snapshot_time >= %s
+                      AND price IS NOT NULL
+                      AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
+                """
+                species_params = [like2, like3, like4, since, like1, like2, like3, like4]
+                if platform:
+                    species_sql += " AND platform = %s"
+                    species_params.append(platform)
+                species_sql += " GROUP BY species ORDER BY count DESC"
+                cur.execute(species_sql, species_params)
+                species_rows = [_serialise_row(r) for r in cur.fetchall()]
 
-            origin_sql = """
-                SELECT COALESCE(NULLIF(origin_standardized, ''), '未知') AS origin,
-                       COUNT(*) AS count
-                FROM product_snapshot
-                WHERE snapshot_time >= %s
-                  AND price IS NOT NULL
-                  AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
-            """
-            origin_params = [since, like1, like2, like3, like4]
-            if platform:
-                origin_sql += " AND platform = %s"
-                origin_params.append(platform)
-            origin_sql += " GROUP BY origin ORDER BY count DESC, origin LIMIT 12"
-            cur.execute(origin_sql, origin_params)
-            origin_rows = [_serialise_row(r) for r in cur.fetchall()]
-
-            return jsonify(
-                {
-                    "days": days,
-                    "platform": platform or "all",
-                    "species": species_rows,
-                    "origins": origin_rows,
-                }
-            )
+                origin_sql = """
+                    SELECT origin_standardized AS origin,
+                           COUNT(*) AS count
+                    FROM product_snapshot
+                    WHERE snapshot_time >= %s
+                      AND price IS NOT NULL
+                      AND origin_standardized IS NOT NULL
+                      AND origin_standardized != ''
+                      AND origin_standardized != %s
+                      AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
+                """
+                origin_params = [since, unknown_origin, like1, like2, like3, like4]
+                if platform:
+                    origin_sql += " AND platform = %s"
+                    origin_params.append(platform)
+                origin_sql += " GROUP BY origin ORDER BY count DESC, origin LIMIT %s"
+                origin_params.append(origin_limit)
+                cur.execute(origin_sql, origin_params)
+                origin_rows = [_serialise_row(r) for r in cur.fetchall()]
+                return jsonify(
+                    {
+                        "days": days,
+                        "origin_limit": origin_limit,
+                        "platform": platform or "all",
+                        "species": species_rows,
+                        "origins": origin_rows,
+                    }
+                )
+        except Exception as exc:
+            logger.exception("salmon distribution error: %s", exc)
+            return jsonify({"error": str(exc)}), 500
     finally:
         conn.close()
 
@@ -293,49 +434,33 @@ def salmon_distribution():
 @app.route("/api/analysis/salmon/online-offline")
 def salmon_online_offline():
     """线上零售与线下批发均价对比。"""
-    days = max(1, min(int(request.args.get("days", 30)), 365))
+    platform = request.args.get("platform", "").strip()
+    days = _get_bounded_int_arg("days", 30, 1, 365)
     since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-    like1, like2, like3, like4 = _salmon_title_like_patterns()
 
     conn = get_conn()
     try:
-        with conn.cursor() as cur:
-            online_sql = """
-                SELECT CASE
-                         WHEN platform = 'jd' THEN '京东线上'
-                         WHEN platform = 'taobao' THEN '淘宝线上'
-                         ELSE platform
-                       END AS channel,
-                       ROUND(AVG(price), 2) AS avg_price,
-                       COUNT(*) AS count
-                FROM product_snapshot
-                WHERE snapshot_time >= %s
-                  AND price IS NOT NULL
-                  AND (title LIKE %s OR title LIKE %s OR title LIKE %s OR title LIKE %s)
-                GROUP BY platform
-                ORDER BY avg_price DESC
-            """
-            cur.execute(online_sql, (since, like1, like2, like3, like4))
-            online_rows = [_serialise_row(r) for r in cur.fetchall()]
-
-            offline_sql = """
-                SELECT '线下批发(MOA)' AS channel,
-                       ROUND(AVG(price), 2) AS avg_price,
-                       COUNT(*) AS count
-                FROM offline_price_snapshot
-                WHERE snapshot_time >= %s
-                  AND price IS NOT NULL
-                  AND (product_name_raw LIKE %s OR product_type = 'salmon_generic')
-            """
-            cur.execute(offline_sql, (since, like1))
-            offline_row = _serialise_row(cur.fetchone() or {})
-
-            data = list(online_rows)
-            if offline_row.get("avg_price") is not None:
-                data.append(offline_row)
-            return jsonify({"days": days, "data": data})
+        try:
+            with conn.cursor() as cur:
+                data = _get_salmon_compare_data(cur, since, platform)
+                return jsonify({"days": days, "platform": platform or "all", "data": data})
+        except Exception as exc:
+            logger.exception("salmon online_offline error: %s", exc)
+            return jsonify({"error": str(exc)}), 500
     finally:
         conn.close()
+
+
+@app.route("/api/analysis/salmon/kpis")
+def salmon_kpis():
+    """三文鱼案例首屏 KPI。"""
+    platform = request.args.get("platform", "").strip()
+    days = _get_bounded_int_arg("days", 30, 1, 365)
+    try:
+        return jsonify(_get_salmon_kpis(platform=platform, days=days))
+    except Exception as exc:
+        logger.exception("salmon kpis error: %s", exc)
+        return jsonify({"error": str(exc)}), 500
 
 
 # ── 爬虫相关 ──────────────────────────────────────────────────────────
@@ -552,15 +677,19 @@ def stats():
     """各表数据量统计。"""
     conn = get_conn()
     try:
-        with conn.cursor() as cur:
-            result = {}
-            for table in ("paper_meta", "product_snapshot", "intel_item", "raw_event", "offline_price_snapshot"):
-                try:
-                    cur.execute(f"SELECT COUNT(*) AS cnt FROM {table}")
-                    result[table] = cur.fetchone()["cnt"]
-                except Exception:
-                    result[table] = 0
-            return jsonify(result)
+        try:
+            with conn.cursor() as cur:
+                result = {}
+                for table in ("paper_meta", "product_snapshot", "intel_item", "raw_event", "offline_price_snapshot"):
+                    try:
+                        cur.execute(f"SELECT COUNT(*) AS cnt FROM {table}")
+                        result[table] = cur.fetchone()["cnt"]
+                    except Exception:
+                        result[table] = 0
+                return jsonify(result)
+        except Exception as exc:
+            logger.exception("stats error: %s", exc)
+            return jsonify({"error": str(exc)}), 500
     finally:
         conn.close()
 
@@ -576,6 +705,7 @@ def dashboard_overview():
             "counts": get_total_counts(),
             "source_stats": get_source_stats(),
             "product_stats": get_product_stats(),
+            "kpis": _get_dashboard_kpis(days=30),
         })
     except Exception as exc:
         logger.exception("dashboard overview error: %s", exc)

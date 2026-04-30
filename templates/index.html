@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>水产养殖情报采集与分析系统</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="{{ url_for('static', filename='demo_data.js') }}"></script>
 <style>
 /* ── 全局 ─────────────────────────────────────────────── */
 :root {
@@ -35,14 +36,26 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,.15);
 }
 .header h1 { font-size: 22px; font-weight: 600; }
-.header .stats-bar { display: flex; gap: 18px; font-size: 13px; opacity: .9; }
+.header .stats-bar { display: flex; gap: 12px; font-size: 13px; opacity: .9; flex-wrap: wrap; justify-content: flex-end; }
 .header .stats-bar span { background: rgba(255,255,255,.18); padding: 4px 12px; border-radius: 12px; }
+.stats-skeleton-pill {
+  width: 96px; height: 26px; border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255,255,255,.14), rgba(255,255,255,.34), rgba(255,255,255,.14));
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+.stats-error-pill { background: rgba(255,255,255,.18); color: #fff; }
 
 /* ── Tab 页签 ─────────────────────────────────────────── */
-.tabs { display: flex; border-bottom: 2px solid var(--border); background: var(--card); padding: 0 32px; }
+.tabs {
+  display: flex; gap: 6px; border-bottom: 2px solid var(--border); background: var(--card); padding: 0 32px;
+  overflow-x: auto; overflow-y: hidden; white-space: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: thin;
+}
+.tabs::-webkit-scrollbar { height: 6px; }
+.tabs::-webkit-scrollbar-thumb { background: #d3d9e3; border-radius: 999px; }
 .tab-btn {
   padding: 14px 28px; cursor: pointer; border: none; background: none;
-  font-size: 15px; color: var(--text-secondary); position: relative; transition: .2s;
+  font-size: 15px; color: var(--text-secondary); position: relative; transition: .2s; flex: 0 0 auto;
 }
 .tab-btn.active { color: var(--primary); font-weight: 600; }
 .tab-btn.active::after {
@@ -51,9 +64,83 @@ body {
 }
 
 /* ── 通用容器 ─────────────────────────────────────────── */
-.container { max-width: 1300px; margin: 0 auto; padding: 24px 32px; }
+.container { max-width: 1220px; margin: 0 auto; padding: 24px 32px; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
+
+.insight-rail {
+  margin-bottom: 22px;
+}
+.insight-banner {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 18px;
+  background: linear-gradient(135deg, #f7fbff 0%, #edf5ff 55%, #f5fbf9 100%);
+  border: 1px solid #dbeafe; border-radius: 18px; padding: 22px 24px; margin-bottom: 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .06);
+}
+.insight-actions {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+}
+.section-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: #0f766e; margin-bottom: 8px;
+}
+.insight-title {
+  font-size: 28px; line-height: 1.18; color: #0f172a; margin-bottom: 8px;
+}
+.insight-subtitle {
+  max-width: 720px; font-size: 15px; line-height: 1.7; color: #475569;
+}
+.route-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 10px 16px; border-radius: 999px; text-decoration: none;
+  background: #0f172a; color: #fff; font-size: 13px; font-weight: 700;
+  letter-spacing: .02em; box-shadow: 0 8px 20px rgba(15, 23, 42, .16);
+}
+.route-link:hover {
+  background: #1e293b;
+}
+.mode-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 112px; padding: 8px 14px; border-radius: 999px;
+  background: rgba(13, 148, 136, .12); color: #0f766e; font-size: 12px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; border: 1px solid rgba(15, 118, 110, .18);
+}
+.kpi-band {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 12px;
+}
+.kpi-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border: 1px solid #dbe6f4; border-radius: 18px; padding: 18px 18px 16px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
+}
+.kpi-card.accent-blue { border-top: 4px solid #1d4ed8; }
+.kpi-card.accent-teal { border-top: 4px solid #0f766e; }
+.kpi-card.accent-amber { border-top: 4px solid #b45309; }
+.kpi-label {
+  font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: #64748b; margin-bottom: 10px;
+}
+.kpi-value {
+  font-size: 34px; line-height: 1; font-weight: 800; color: #0f172a; margin-bottom: 10px;
+}
+.kpi-caption {
+  font-size: 13px; line-height: 1.6; color: #475569;
+}
+.system-meta, .page-footnote {
+  display: flex; flex-wrap: wrap; gap: 10px;
+}
+.system-meta { margin-bottom: 18px; }
+.meta-pill {
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px;
+  border-radius: 999px; border: 1px solid #dbe5f0; background: #fff; color: #475569; font-size: 12px;
+}
+.page-footnote {
+  margin-top: 14px; color: #64748b; font-size: 12px;
+}
+.footnote-text {
+  padding: 10px 14px; border-radius: 14px; border: 1px dashed #dbe5f0; background: #fbfcff;
+}
 
 /* ── 卡片 ─────────────────────────────────────────────── */
 .card {
@@ -96,16 +183,20 @@ body {
 .status-error    { background: #fff2f0; color: #ff4d4f; }
 
 /* ── 任务列表 ─────────────────────────────────────────── */
-.task-list { max-height: 260px; overflow-y: auto; }
+.task-list { max-height: 260px; overflow-y: auto; position: relative; }
 .task-item {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px;
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; padding: 10px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px;
 }
 .task-item:last-child { border-bottom: none; }
-.task-meta { display: flex; gap: 14px; align-items: center; }
+.task-meta { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.task-result {
+  color: var(--text-secondary); font-size: 12px; line-height: 1.5;
+  max-width: 360px; word-break: break-word; text-align: right;
+}
 
 /* ── 数据表格 ─────────────────────────────────────────── */
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; position: relative; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th { background: #fafafa; padding: 10px 12px; text-align: left; font-weight: 600; border-bottom: 2px solid var(--border); position: sticky; top: 0; z-index: 1; }
 td { padding: 9px 12px; border-bottom: 1px solid #f5f5f5; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -113,6 +204,7 @@ tr:hover td { background: #fafafa; }
 td a { color: var(--primary); text-decoration: none; }
 td a:hover { text-decoration: underline; }
 .no-data { text-align: center; padding: 40px; color: var(--text-secondary); }
+.price-pill { font-weight: 600; color: var(--error); }
 
 /* ── 结果统计条 ───────────────────────────────────────── */
 .result-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -121,14 +213,25 @@ td a:hover { text-decoration: underline; }
 /* ── 加载动画 ─────────────────────────────────────────── */
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--primary); border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; margin-right: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { to { background-position: -200% 0; } }
 
-/* ── 响应式 ───────────────────────────────────────────── */
-@media (max-width: 768px) {
-  .form-row { flex-direction: column; }
-  .container { padding: 16px; }
-  .header { flex-direction: column; gap: 10px; padding: 16px; }
-  .metric-grid { grid-template-columns: repeat(2, 1fr); }
-  .chart-grid { grid-template-columns: 1fr; }
+.panel-state {
+  width: 100%; min-height: inherit; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+  gap: 10px; padding: 18px 16px; border-radius: 12px; border: 1px dashed #dce5f0; background: #fbfcff;
+}
+.panel-state.compact { min-height: 140px; }
+.panel-state-loading { border-style: solid; border-color: #eef2f7; }
+.panel-state-empty { color: var(--text-secondary); }
+.panel-state-error { color: #b42318; background: #fff6f5; border-color: #ffd6d3; }
+.panel-state-icon { font-size: 18px; line-height: 1; }
+.panel-state-text { font-size: 15px; font-weight: 600; }
+.panel-state-caption { font-size: 13px; line-height: 1.6; }
+.skeleton-stack { display: grid; gap: 12px; width: 100%; }
+.skeleton-line {
+  height: 12px; border-radius: 999px;
+  background: linear-gradient(90deg, #eef3f8 0%, #f7f9fc 50%, #eef3f8 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
 }
 
 /* ── 仪表盘指标卡片 ────────────────────────── */
@@ -152,16 +255,38 @@ td a:hover { text-decoration: underline; }
   box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 20px;
 }
 .chart-box h3 { font-size: 15px; margin-bottom: 12px; color: var(--text); }
-.chart-box .plotly-chart { width: 100%; min-height: 320px; }
+.chart-box .plotly-chart { width: 100%; min-height: 320px; position: relative; }
 .chart-full {
   background: var(--card); border-radius: var(--radius);
   box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 20px; margin-bottom: 20px;
 }
 .chart-full h3 { font-size: 15px; margin-bottom: 12px; color: var(--text); }
-.chart-full .plotly-chart { width: 100%; min-height: 380px; }
+.chart-full .plotly-chart { width: 100%; min-height: 380px; position: relative; }
 
 /* ── 运行记录表 ────────────────────────────── */
-.run-table { max-height: 300px; overflow-y: auto; }
+.run-table { max-height: 300px; overflow: auto; position: relative; }
+
+/* ── 响应式 ───────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .form-row { flex-direction: column; align-items: stretch; }
+  .container { padding: 16px; }
+  .header { flex-direction: column; gap: 10px; padding: 16px; align-items: flex-start; }
+  .header .stats-bar { justify-content: flex-start; }
+  .tabs { padding: 0 12px; }
+  .tab-btn { padding: 12px 16px; font-size: 14px; }
+  .insight-banner { flex-direction: column; padding: 18px; }
+  .insight-actions { align-items: flex-start; }
+  .insight-title { font-size: 24px; }
+  .insight-subtitle { font-size: 14px; }
+  .kpi-band { grid-template-columns: 1fr; }
+  .kpi-value { font-size: 30px; }
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chart-grid { grid-template-columns: 1fr; }
+  .chart-box, .chart-full, .card { padding: 18px; }
+  .chart-box .plotly-chart, .chart-full .plotly-chart { min-height: 260px; }
+  .task-item { flex-direction: column; align-items: stretch; gap: 8px; }
+  .task-result { max-width: none; text-align: left; }
+}
 </style>
 </head>
 <body>
@@ -186,6 +311,24 @@ td a:hover { text-decoration: underline; }
 
 <!-- ═══════════════════ 数据总览 ═══════════════════ -->
 <div class="tab-content active" id="tab-dashboard">
+  <div class="insight-rail">
+    <div class="insight-banner">
+      <div>
+        <div class="section-eyebrow" id="dashboardEyebrow">答辩展示级总览</div>
+        <div class="insight-title">多源异构水产情报监测全景</div>
+        <div class="insight-subtitle">
+          将价格走势、来源覆盖、采集样本与运行闭环放在同一张总览页上，直接外显系统的业务价值与工程完成度。
+        </div>
+      </div>
+      <div class="insight-actions">
+        <a class="route-link" id="salmonCaseLink" href="{{ url_for('salmon_analysis') }}?days=60">进入三文鱼专题页</a>
+        <div class="mode-chip" id="dashboardModeChip" hidden>Demo Mode</div>
+      </div>
+    </div>
+    <div class="kpi-band" id="dashboardKpis"></div>
+    <div class="system-meta" id="dashboardMeta"></div>
+  </div>
+
   <!-- 指标卡片 -->
   <div class="metric-grid" id="metricCards">
     <div class="metric-card"><div class="metric-icon">📄</div><div class="metric-value" id="mc-papers">-</div><div class="metric-label">学术论文</div></div>
@@ -229,6 +372,7 @@ td a:hover { text-decoration: underline; }
     <h3>🕐 最近采集运行记录</h3>
     <div class="run-table" id="crawlRunsTable"><div class="no-data">加载中...</div></div>
   </div>
+  <div class="page-footnote" id="dashboardFootnote"></div>
 </div>
 
 <!-- ═══════════════════ 采集页 ═══════════════════ -->
@@ -402,425 +546,932 @@ td a:hover { text-decoration: underline; }
 
 <!-- ═══════════════════ JS ═══════════════════ -->
 <script>
-/* ── Tab 切换 ──────────────────────────────── */
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-  });
-});
+const PAGE_PARAMS = new URL(window.location.href).searchParams;
+const DEMO_MODE = PAGE_PARAMS.get('mode') === 'demo';
+const DEMO_API = window.AQUA_DEMO_API;
+const SYSTEM_LINEAGE = '多源异构自动化采集模块';
+const ACADEMIC_PALETTE = {
+  navy: '#123b67',
+  blue: '#1d4ed8',
+  indigo: '#4338ca',
+  teal: '#0f766e',
+  emerald: '#047857',
+  cyan: '#0891b2',
+  amber: '#b45309',
+  red: '#b42318',
+  slate: '#475569',
+  grid: 'rgba(15, 23, 42, .08)',
+};
 
-/* ── 统计 ──────────────────────────────────── */
-async function loadStats() {
-  try {
-    const r = await fetch('/api/stats');
-    const d = await r.json();
-    document.getElementById('statsBar').innerHTML =
-      `<span>📄 论文 ${d.paper_meta || 0}</span>` +
-      `<span>🛒 商品 ${d.product_snapshot || 0}</span>` +
-      `<span>🏪 线下价格 ${d.offline_price_snapshot || 0}</span>` +
-      `<span>📋 政策 ${d.intel_item || 0}</span>` +
-      `<span>📦 原始事件 ${d.raw_event || 0}</span>`;
-  } catch(e) {
-    document.getElementById('statsBar').textContent = '统计加载失败';
-  }
+function buildPlotTitle(text) {
+  return {
+    text: `<b>${text}</b>`,
+    x: 0.5,
+    xanchor: 'center',
+    font: {size: 18, color: '#0f172a'},
+  };
 }
-loadStats();
 
-/* ── 爬虫描述映射 ─────────────────────────── */
+function buildAxis(title) {
+  return {
+    title: {text: title, font: {size: 13, color: ACADEMIC_PALETTE.slate}},
+    tickfont: {size: 12, color: ACADEMIC_PALETTE.slate},
+    showgrid: true,
+    gridcolor: ACADEMIC_PALETTE.grid,
+    zeroline: false,
+    automargin: true,
+    title_standoff: 12,
+  };
+}
+
+const PLOTLY_LAYOUT_BASE = {
+  paper_bgcolor: '#fff',
+  plot_bgcolor: '#fff',
+  margin: {l: 82, r: 34, t: 82, b: 72},
+  font: {family: '"Microsoft YaHei", sans-serif', size: 13, color: '#334155'},
+  legend: {orientation: 'h', y: -0.22, x: 0, font: {size: 12}},
+  showlegend: true,
+  hovermode: 'x unified',
+  hoverlabel: {bgcolor: '#ffffff', bordercolor: '#cbd5e1', font: {size: 12, color: '#0f172a'}},
+};
+const PLOTLY_CFG = {displayModeBar: false, responsive: true, displaylogo: false};
+
 const CRAWLER_LABELS = {
-  cnki: '知网论文', jd: '京东商品', taobao: '淘宝商品',
-  salmon: '🎯虹鳟/帝王鲑', moa: '农业农村部政策', moa_prices: '线下价格'
+  cnki: '知网论文',
+  jd: '京东商品',
+  taobao: '淘宝商品',
+  salmon: '虹鳟/帝王鲑',
+  moa: '农业农村部政策',
+  moa_prices: '线下价格',
 };
 const STATUS_LABELS = {
-  pending:  ['等待中',  'pending'],
-  running:  ['采集中…', 'running'],
-  done:     ['完成',    'done'],
-  error:    ['失败',    'error'],
+  pending: ['等待中', 'pending'],
+  running: ['采集中…', 'running'],
+  done: ['完成', 'done'],
+  error: ['失败', 'error'],
 };
 
-/* ── 任务记录 ─────────────────────────────── */
-const tasks = [];  // {id, crawler, keyword, status, result, ...}
-let pollingIds = new Set();
+const tasks = [];
+const pollingIds = new Set();
+const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+
+function getEl(id) {
+  return document.getElementById(id);
+}
+
+function clearNode(node) {
+  if (!node) return;
+  try {
+    if (window.Plotly) Plotly.purge(node);
+  } catch (error) {
+    console.debug('Plotly purge skipped:', error);
+  }
+  node.replaceChildren();
+}
+
+function textOrDash(value) {
+  if (value === null || value === undefined || value === '') return '-';
+  return String(value);
+}
+
+function formatCount(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num.toLocaleString() : '—';
+}
+
+function formatError(error) {
+  if (error instanceof Error && error.message) return error.message;
+  return String(error || '未知错误');
+}
+
+function formatCurrency(value, digits = 1) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '—';
+  return `¥${num.toFixed(digits)}`;
+}
+
+function currentDateLabel() {
+  if (DEMO_MODE && DEMO_API && DEMO_API.data && DEMO_API.data.currentDate) {
+    return DEMO_API.data.currentDate;
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
+function buildPlotLayout({title, xTitle, yTitle, legendY = -0.22, showlegend = true, extra = {}}) {
+  return {
+    ...PLOTLY_LAYOUT_BASE,
+    title: buildPlotTitle(title),
+    xaxis: xTitle ? buildAxis(xTitle) : undefined,
+    yaxis: yTitle ? buildAxis(yTitle) : undefined,
+    legend: {...PLOTLY_LAYOUT_BASE.legend, y: legendY},
+    showlegend,
+    ...extra,
+  };
+}
+
+function safeUrl(value) {
+  if (!value) return '';
+  try {
+    const url = new URL(String(value), window.location.origin);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch (error) {
+    return '';
+  }
+}
+
+function buildInternalHref(path, extraParams = {}) {
+  const url = new URL(path, window.location.origin);
+  if (DEMO_MODE) url.searchParams.set('mode', 'demo');
+  Object.entries(extraParams).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  });
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function createNode(tag, {className = '', text, attrs = {}} = {}) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = String(text);
+  Object.entries(attrs).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== '') {
+      el.setAttribute(key, String(value));
+    }
+  });
+  return el;
+}
+
+function appendContent(parent, content) {
+  if (content === null || content === undefined) {
+    parent.textContent = '-';
+    return;
+  }
+  if (content instanceof Node) {
+    parent.appendChild(content);
+    return;
+  }
+  if (Array.isArray(content)) {
+    if (!content.length) {
+      parent.textContent = '-';
+      return;
+    }
+    content.forEach(item => appendContent(parent, item));
+    return;
+  }
+  parent.textContent = textOrDash(content);
+}
+
+function createTextNode(value, maxLen) {
+  const text = textOrDash(value);
+  const clamped = Boolean(maxLen && text.length > maxLen);
+  const span = createNode('span', {text: clamped ? `${text.slice(0, maxLen)}…` : text});
+  if (clamped) span.title = text;
+  return span;
+}
+
+function createSafeLink(value, label = '链接') {
+  const href = safeUrl(value);
+  if (!href) return createTextNode('-');
+  const anchor = createNode('a', {text: label});
+  anchor.href = href;
+  anchor.target = '_blank';
+  anchor.rel = 'noopener noreferrer';
+  return anchor;
+}
+
+function renderModeChip(id) {
+  const chip = getEl(id);
+  if (!chip) return;
+  chip.hidden = !DEMO_MODE;
+  chip.textContent = DEMO_MODE ? 'Demo Mode' : '';
+}
+
+function hydrateRouteLinks() {
+  const salmonLink = getEl('salmonCaseLink');
+  if (salmonLink) {
+    salmonLink.href = buildInternalHref('{{ url_for("salmon_analysis") }}', {days: 60});
+  }
+}
+
+function renderKpiCards(containerId, items) {
+  const el = getEl(containerId);
+  clearNode(el);
+  if (!items.length) return;
+  items.forEach(item => {
+    const card = createNode('div', {className: `kpi-card ${item.accent || 'accent-blue'}`});
+    card.appendChild(createNode('div', {className: 'kpi-label', text: item.label}));
+    card.appendChild(createNode('div', {className: 'kpi-value', text: item.value}));
+    card.appendChild(createNode('div', {className: 'kpi-caption', text: item.caption}));
+    el.appendChild(card);
+  });
+}
+
+function renderSystemMeta(containerId, extraItems = []) {
+  const el = getEl(containerId);
+  clearNode(el);
+  const items = [
+    `最后更新时间：${DEMO_MODE ? `${currentDateLabel()}（Demo）` : '实时'}`,
+    `数据源链路：${SYSTEM_LINEAGE}`,
+    ...extraItems,
+  ];
+  items.forEach(text => {
+    el.appendChild(createNode('span', {className: 'meta-pill', text}));
+  });
+}
+
+function renderFootnote(containerId, text) {
+  const el = getEl(containerId);
+  clearNode(el);
+  el.appendChild(createNode('div', {className: 'footnote-text', text}));
+}
+
+function createSkeletonState(message, {lines = 4, compact = false} = {}) {
+  const state = createNode('div', {
+    className: `panel-state panel-state-loading${compact ? ' compact' : ''}`,
+    attrs: {role: 'status', 'aria-live': 'polite'},
+  });
+  const stack = createNode('div', {className: 'skeleton-stack'});
+  const widths = compact ? ['92%', '76%', '84%', '68%', '88%'] : ['96%', '82%', '90%', '74%', '88%', '66%'];
+  for (let i = 0; i < lines; i += 1) {
+    const line = createNode('span', {className: 'skeleton-line'});
+    line.style.width = widths[i % widths.length];
+    stack.appendChild(line);
+  }
+  state.appendChild(stack);
+  if (message) state.appendChild(createNode('div', {className: 'panel-state-caption', text: message}));
+  return state;
+}
+
+function createMessageState(kind, message, {compact = false} = {}) {
+  const iconMap = {empty: '○', error: '⚠'};
+  const titleMap = {empty: '暂无数据', error: '加载失败'};
+  const state = createNode('div', {
+    className: `panel-state panel-state-${kind}${compact ? ' compact' : ''}`,
+    attrs: {role: 'status', 'aria-live': 'polite'},
+  });
+  state.appendChild(createNode('div', {className: 'panel-state-icon', text: iconMap[kind] || 'ℹ'}));
+  state.appendChild(createNode('div', {className: 'panel-state-text', text: titleMap[kind] || '提示'}));
+  state.appendChild(createNode('div', {className: 'panel-state-caption', text: message}));
+  return state;
+}
+
+function renderState(target, kind, message, options = {}) {
+  const el = typeof target === 'string' ? getEl(target) : target;
+  if (!el) return;
+  clearNode(el);
+  el.appendChild(kind === 'loading' ? createSkeletonState(message, options) : createMessageState(kind, message, options));
+}
+
+function renderStatsLoading() {
+  const el = getEl('statsBar');
+  clearNode(el);
+  for (let i = 0; i < 5; i += 1) {
+    el.appendChild(createNode('span', {className: 'stats-skeleton-pill', attrs: {'aria-hidden': 'true'}}));
+  }
+}
+
+function renderStatsBar(data) {
+  const el = getEl('statsBar');
+  clearNode(el);
+  [
+    ['📄 论文', data.paper_meta || 0],
+    ['🛒 商品', data.product_snapshot || 0],
+    ['🏪 线下价格', data.offline_price_snapshot || 0],
+    ['📋 政策', data.intel_item || 0],
+    ['📦 原始事件', data.raw_event || 0],
+  ].forEach(([label, value]) => {
+    el.appendChild(createNode('span', {text: `${label} ${formatCount(value)}`}));
+  });
+}
+
+function renderStatsError(message) {
+  const el = getEl('statsBar');
+  clearNode(el);
+  el.appendChild(createNode('span', {className: 'stats-error-pill', text: message}));
+}
+
+function setMetricValues(counts = {}) {
+  getEl('mc-papers').textContent = counts.papers !== undefined ? formatCount(counts.papers) : '—';
+  getEl('mc-products').textContent = counts.products !== undefined ? formatCount(counts.products) : '—';
+  getEl('mc-intel').textContent = counts.intel_items !== undefined ? formatCount(counts.intel_items) : '—';
+  getEl('mc-runs').textContent = counts.crawl_runs !== undefined ? formatCount(counts.crawl_runs) : '—';
+}
+
+function createStatusBadge(status) {
+  const [label, cls] = STATUS_LABELS[status] || ['未知', 'pending'];
+  const badge = createNode('span', {className: `status-badge status-${cls}`});
+  if (status === 'running') {
+    badge.appendChild(createNode('span', {className: 'spinner', attrs: {'aria-hidden': 'true'}}));
+  }
+  badge.appendChild(document.createTextNode(label));
+  return badge;
+}
 
 function renderTasks() {
-  const el = document.getElementById('taskList');
-  if (tasks.length === 0) { el.innerHTML = '<div class="no-data">暂无任务</div>'; return; }
-  el.innerHTML = tasks.map(t => {
-    const [label, cls] = STATUS_LABELS[t.status] || ['未知', 'pending'];
-    return `<div class="task-item">
-      <div class="task-meta">
-        <span class="status-badge status-${cls}">${t.status === 'running' ? '<span class="spinner"></span>' : ''}${label}</span>
-        <span><b>${CRAWLER_LABELS[t.crawler] || t.crawler}</b></span>
-        <span>关键词: ${t.keyword || '-'}</span>
-      </div>
-      <div style="color:var(--text-secondary);font-size:12px;">${t.result || ''}</div>
-    </div>`;
-  }).join('');
+  const el = getEl('taskList');
+  if (!tasks.length) {
+    renderState(el, 'empty', '暂无任务，启动采集后会在这里实时显示进度。', {compact: true});
+    return;
+  }
+  clearNode(el);
+  tasks.forEach(task => {
+    const item = createNode('div', {className: 'task-item'});
+    const meta = createNode('div', {className: 'task-meta'});
+    const crawler = createNode('span');
+    crawler.appendChild(createNode('b', {text: CRAWLER_LABELS[task.crawler] || task.crawler}));
+    meta.appendChild(createStatusBadge(task.status));
+    meta.appendChild(crawler);
+    meta.appendChild(createNode('span', {text: `关键词: ${task.keyword || '-'}`}));
+    item.appendChild(meta);
+    item.appendChild(createNode('div', {
+      className: 'task-result',
+      text: task.result || (task.status === 'running' ? '任务正在执行中…' : '等待执行'),
+    }));
+    el.appendChild(item);
+  });
+}
+
+async function fetchJson(url, options = {}) {
+  if (DEMO_MODE && DEMO_API && typeof DEMO_API.respond === 'function') {
+    return DEMO_API.respond(url, options);
+  }
+  const response = await fetch(url, options);
+  const contentType = response.headers.get('content-type') || '';
+  let payload = {};
+  if (contentType.includes('application/json')) {
+    payload = await response.json();
+  } else {
+    const text = await response.text();
+    if (text) payload = {error: text};
+  }
+  if (!response.ok) throw new Error(payload.error || `${response.status} ${response.statusText}`);
+  if (payload && payload.error) throw new Error(payload.error);
+  return payload;
+}
+
+function activateTab(tabName) {
+  tabButtons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  });
+  document.querySelectorAll('.tab-content').forEach(content => {
+    content.classList.toggle('active', content.id === `tab-${tabName}`);
+  });
+  const activeBtn = tabButtons.find(btn => btn.dataset.tab === tabName);
+  if (activeBtn) activeBtn.scrollIntoView({block: 'nearest', inline: 'center'});
+}
+
+tabButtons.forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
+
+function renderTable(containerId, columns, rows, {emptyMessage = '暂无数据'} = {}) {
+  const el = getEl(containerId);
+  if (!Array.isArray(rows) || rows.length === 0) {
+    renderState(el, 'empty', emptyMessage, {compact: true});
+    return;
+  }
+  clearNode(el);
+  const table = createNode('table');
+  const thead = createNode('thead');
+  const headerRow = createNode('tr');
+  columns.forEach(column => headerRow.appendChild(createNode('th', {text: column.label})));
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+  const tbody = createNode('tbody');
+  rows.forEach((row, rowIndex) => {
+    const tr = createNode('tr');
+    columns.forEach(column => {
+      const td = createNode('td', {className: column.cellClass || ''});
+      let content;
+      if (typeof column.render === 'function') content = column.render(row, rowIndex);
+      else if (column.isLink) content = createSafeLink(row[column.key], column.linkLabel || '链接');
+      else content = createTextNode(row[column.key], column.maxLen);
+      appendContent(td, content);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  el.appendChild(table);
+}
+
+function initStaticStates() {
+  renderStatsLoading();
+  renderModeChip('dashboardModeChip');
+  getEl('dashboardEyebrow').textContent = DEMO_MODE ? '答辩展示级总览 / Demo 稳定版' : '答辩展示级总览';
+  renderKpiCards('dashboardKpis', [
+    {label: '全网监测均价（¥/kg）', value: '—', caption: '近30天线上+线下综合均值', accent: 'accent-blue'},
+    {label: '线上/线下最大价差', value: '—', caption: '用于直接展示价格监测的业务敏感度', accent: 'accent-teal'},
+    {label: '近30天采集样本量', value: '—', caption: '覆盖论文、价格、政策与线下采样', accent: 'accent-amber'},
+  ]);
+  renderSystemMeta('dashboardMeta', [DEMO_MODE ? '运行模式：演示稳定模式' : '运行模式：实时采集链路']);
+  renderFootnote('dashboardFootnote', '系统展示口径已统一为高对比度学术风视图，适配投影仪与答辩现场讲解。');
+  renderTasks();
+  renderState('paperTable', 'empty', '请输入条件后查询论文。', {compact: true});
+  renderState('prodTable', 'empty', '请输入条件后查询商品。', {compact: true});
+  renderState('offlineTable', 'empty', '请输入条件后查询线下价格。', {compact: true});
+  renderState('intelTable', 'empty', '请输入条件后查询渔业政策。', {compact: true});
 }
 
 async function pollTask(taskId) {
   if (pollingIds.has(taskId)) return;
   pollingIds.add(taskId);
+
   const poll = async () => {
     try {
-      const r = await fetch('/api/task/' + taskId);
-      const d = await r.json();
-      const idx = tasks.findIndex(t => t.id === taskId);
-      if (idx >= 0) Object.assign(tasks[idx], d);
+      const data = await fetchJson(`/api/task/${taskId}`);
+      const index = tasks.findIndex(task => task.id === taskId);
+      if (index >= 0) Object.assign(tasks[index], data);
       renderTasks();
-      if (d.status === 'running' || d.status === 'pending') {
+      if (data.status === 'running' || data.status === 'pending') {
         setTimeout(poll, 2000);
       } else {
         pollingIds.delete(taskId);
         loadStats();
       }
-    } catch(e) {
+    } catch (error) {
+      const index = tasks.findIndex(task => task.id === taskId);
+      if (index >= 0) {
+        tasks[index].status = 'error';
+        tasks[index].result = `状态轮询失败：${formatError(error)}`;
+      }
+      renderTasks();
       pollingIds.delete(taskId);
     }
   };
+
   poll();
 }
 
 async function startCrawl() {
-  const crawler = document.getElementById('crawlerSelect').value;
-  const keyword = document.getElementById('keywordInput').value.trim();
-  const pages = parseInt(document.getElementById('pagesInput').value) || 1;
+  const crawler = getEl('crawlerSelect').value;
+  const keyword = getEl('keywordInput').value.trim();
+  const pages = parseInt(getEl('pagesInput').value, 10) || 1;
 
-  if (!keyword && !['moa','moa_prices','salmon'].includes(crawler)) { alert('请输入关键词'); return; }
+  if (!keyword && !['moa', 'moa_prices', 'salmon'].includes(crawler)) {
+    renderState('taskList', 'error', '请输入关键词后再启动采集任务。', {compact: true});
+    return;
+  }
 
-  const btn = document.getElementById('startCrawlBtn');
-  btn.disabled = true; btn.textContent = '启动中...';
+  const btn = getEl('startCrawlBtn');
+  btn.disabled = true;
+  btn.textContent = '启动中...';
 
   try {
-    const r = await fetch('/api/crawl', {
+    const data = await fetchJson('/api/crawl', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({crawler, keyword, pages}),
     });
-    const d = await r.json();
-    if (d.error) { alert(d.error); return; }
-    tasks.unshift({id: d.task_id, crawler, keyword, status: 'pending', result: null});
+    tasks.unshift({id: data.task_id, crawler, keyword, status: 'pending', result: '任务已创建，等待执行…'});
     renderTasks();
-    pollTask(d.task_id);
-  } catch(e) {
-    alert('启动失败: ' + e.message);
+    pollTask(data.task_id);
+  } catch (error) {
+    renderState('taskList', 'error', `启动失败：${formatError(error)}`, {compact: true});
   } finally {
-    btn.disabled = false; btn.textContent = '🚀 开始采集';
+    btn.disabled = false;
+    btn.textContent = '🚀 开始采集';
   }
 }
 
-/* ── 通用表格渲染 ─────────────────────────── */
-function renderTable(containerId, columns, rows) {
-  const el = document.getElementById(containerId);
-  if (!rows || rows.length === 0) { el.innerHTML = '<div class="no-data">暂无数据</div>'; return; }
-  let html = '<table><thead><tr>';
-  columns.forEach(c => html += `<th>${c.label}</th>`);
-  html += '</tr></thead><tbody>';
-  rows.forEach(row => {
-    html += '<tr>';
-    columns.forEach(c => {
-      let val = row[c.key] ?? '';
-      if (c.isLink && val) val = `<a href="${val}" target="_blank">链接</a>`;
-      if (c.maxLen && typeof val === 'string' && val.length > c.maxLen)
-        val = `<span title="${val.replace(/"/g,'&quot;')}">${val.substring(0, c.maxLen)}…</span>`;
-      html += `<td>${val}</td>`;
-    });
-    html += '</tr>';
-  });
-  html += '</tbody></table>';
-  el.innerHTML = html;
+async function executeTableQuery({countId, containerId, url, columns, emptyMessage, loadingMessage, errorPrefix}) {
+  getEl(countId).textContent = '加载中...';
+  renderState(containerId, 'loading', loadingMessage, {compact: true, lines: 6});
+  try {
+    const data = await fetchJson(url);
+    getEl(countId).textContent = `共 ${formatCount(data.count || 0)} 条结果`;
+    renderTable(containerId, columns, data.data || [], {emptyMessage});
+  } catch (error) {
+    getEl(countId).textContent = '加载失败';
+    renderState(containerId, 'error', `${errorPrefix}：${formatError(error)}`, {compact: true});
+  }
 }
 
-/* ── 论文查询 ─────────────────────────────── */
 async function queryPapers() {
-  const kw = document.getElementById('paperKeyword').value.trim();
-  const limit = document.getElementById('paperLimit').value;
-  const params = new URLSearchParams({keyword: kw, limit});
-  try {
-    const r = await fetch('/api/query/papers?' + params);
-    const d = await r.json();
-    document.getElementById('paperCount').textContent = `共 ${d.count} 条结果`;
-    renderTable('paperTable', [
-      {key:'id', label:'ID'},
-      {key:'theme', label:'主题'},
-      {key:'title', label:'标题', maxLen: 60},
-      {key:'authors', label:'作者', maxLen: 30},
-      {key:'source', label:'来源'},
-      {key:'pub_date', label:'发表日期'},
-      {key:'abstract', label:'摘要', maxLen: 80},
-      {key:'keywords_json', label:'关键词', maxLen: 40},
-      {key:'url', label:'链接', isLink: true},
-      {key:'fetched_at', label:'采集时间'},
-    ], d.data);
-  } catch(e) { alert('查询失败: ' + e.message); }
+  const keyword = getEl('paperKeyword').value.trim();
+  const limit = getEl('paperLimit').value;
+  const params = new URLSearchParams({keyword, limit});
+  await executeTableQuery({
+    countId: 'paperCount',
+    containerId: 'paperTable',
+    url: `/api/query/papers?${params.toString()}`,
+    loadingMessage: '论文数据加载中…',
+    emptyMessage: '没有匹配到论文数据。',
+    errorPrefix: '论文查询失败',
+    columns: [
+      {key: 'id', label: 'ID'},
+      {key: 'theme', label: '主题'},
+      {key: 'title', label: '标题', maxLen: 60},
+      {key: 'authors', label: '作者', maxLen: 30},
+      {key: 'source', label: '来源'},
+      {key: 'pub_date', label: '发表日期'},
+      {key: 'abstract', label: '摘要', maxLen: 80},
+      {key: 'keywords_json', label: '关键词', maxLen: 40},
+      {key: 'url', label: '链接', isLink: true},
+      {key: 'fetched_at', label: '采集时间'},
+    ],
+  });
 }
 
-/* ── 商品查询 ─────────────────────────────── */
 async function queryProducts() {
-  const kw = document.getElementById('prodKeyword').value.trim();
-  const platform = document.getElementById('prodPlatform').value;
-  const limit = document.getElementById('prodLimit').value;
-  const params = new URLSearchParams({keyword: kw, platform, limit});
-  try {
-    const r = await fetch('/api/query/products?' + params);
-    const d = await r.json();
-    document.getElementById('prodCount').textContent = `共 ${d.count} 条结果`;
-    renderTable('prodTable', [
-      {key:'id', label:'ID'},
-      {key:'platform', label:'平台'},
-      {key:'keyword', label:'搜索词'},
-      {key:'title', label:'商品名称', maxLen: 50},
-      {key:'price', label:'价格(¥)'},
-      {key:'original_price', label:'原价'},
-      {key:'sales_or_commit', label:'销量/评价'},
-      {key:'shop', label:'店铺', maxLen: 20},
-      {key:'province', label:'省份'},
-      {key:'city', label:'城市'},
-      {key:'detail_url', label:'链接', isLink: true},
-      {key:'snapshot_time', label:'采集时间'},
-    ], d.data);
-  } catch(e) { alert('查询失败: ' + e.message); }
+  const keyword = getEl('prodKeyword').value.trim();
+  const platform = getEl('prodPlatform').value;
+  const limit = getEl('prodLimit').value;
+  const params = new URLSearchParams({keyword, platform, limit});
+  await executeTableQuery({
+    countId: 'prodCount',
+    containerId: 'prodTable',
+    url: `/api/query/products?${params.toString()}`,
+    loadingMessage: '商品数据加载中…',
+    emptyMessage: '没有匹配到商品数据。',
+    errorPrefix: '商品查询失败',
+    columns: [
+      {key: 'id', label: 'ID'},
+      {key: 'platform', label: '平台'},
+      {key: 'keyword', label: '搜索词'},
+      {key: 'title', label: '商品名称', maxLen: 50},
+      {key: 'price', label: '价格(¥)'},
+      {key: 'original_price', label: '原价'},
+      {key: 'sales_or_commit', label: '销量/评价'},
+      {key: 'shop', label: '店铺', maxLen: 20},
+      {key: 'province', label: '省份'},
+      {key: 'city', label: '城市'},
+      {key: 'detail_url', label: '链接', isLink: true},
+      {key: 'snapshot_time', label: '采集时间'},
+    ],
+  });
 }
 
-/* ── 政策查询 ─────────────────────────────── */
 async function queryIntel() {
-  const kw = document.getElementById('intelKeyword').value.trim();
-  const limit = document.getElementById('intelLimit').value;
-  const params = new URLSearchParams({keyword: kw, limit});
-  try {
-    const r = await fetch('/api/query/intel?' + params);
-    const d = await r.json();
-    document.getElementById('intelCount').textContent = `共 ${d.count} 条结果`;
-    renderTable('intelTable', [
-      {key:'id', label:'ID'},
-      {key:'source_type', label:'来源类型'},
-      {key:'title', label:'标题', maxLen: 60},
-      {key:'pub_time', label:'发布时间'},
-      {key:'org', label:'发布机构', maxLen: 30},
-      {key:'region', label:'区域'},
-      {key:'content', label:'内容', maxLen: 100},
-      {key:'source_url', label:'链接', isLink: true},
-      {key:'fetched_at', label:'采集时间'},
-    ], d.data);
-  } catch(e) { alert('查询失败: ' + e.message); }
+  const keyword = getEl('intelKeyword').value.trim();
+  const limit = getEl('intelLimit').value;
+  const params = new URLSearchParams({keyword, limit});
+  await executeTableQuery({
+    countId: 'intelCount',
+    containerId: 'intelTable',
+    url: `/api/query/intel?${params.toString()}`,
+    loadingMessage: '政策数据加载中…',
+    emptyMessage: '没有匹配到渔业政策。',
+    errorPrefix: '政策查询失败',
+    columns: [
+      {key: 'id', label: 'ID'},
+      {key: 'source_type', label: '来源类型'},
+      {key: 'title', label: '标题', maxLen: 60},
+      {key: 'pub_time', label: '发布时间'},
+      {key: 'org', label: '发布机构', maxLen: 30},
+      {key: 'region', label: '区域'},
+      {key: 'content', label: '内容', maxLen: 100},
+      {key: 'source_url', label: '链接', isLink: true},
+      {key: 'fetched_at', label: '采集时间'},
+    ],
+  });
 }
 
-/* ── 线下价格查询 ───────────────────── */
 async function queryOffline() {
-  const kw = document.getElementById('offlineKeyword').value.trim();
-  const limit = document.getElementById('offlineLimit').value;
-  const params = new URLSearchParams({keyword: kw, limit});
-  try {
-    const r = await fetch('/api/query/offline_prices?' + params);
-    const d = await r.json();
-    document.getElementById('offlineCount').textContent = `共 ${d.count} 条结果`;
-    renderTable('offlineTable', [
-      {key:'id', label:'ID'},
-      {key:'source_name', label:'数据源'},
-      {key:'market_name', label:'市场'},
-      {key:'region', label:'地区'},
-      {key:'product_type', label:'品种'},
-      {key:'product_name_raw', label:'原始品名', maxLen: 30},
-      {key:'min_price', label:'最低价'},
-      {key:'max_price', label:'最高价'},
-      {key:'price', label:'均价'},
-      {key:'unit', label:'单位'},
-      {key:'storage_method', label:'储存方式'},
-      {key:'snapshot_time', label:'采集时间'},
-    ], d.data);
-  } catch(e) { alert('查询失败: ' + e.message); }
+  const keyword = getEl('offlineKeyword').value.trim();
+  const limit = getEl('offlineLimit').value;
+  const params = new URLSearchParams({keyword, limit});
+  await executeTableQuery({
+    countId: 'offlineCount',
+    containerId: 'offlineTable',
+    url: `/api/query/offline_prices?${params.toString()}`,
+    loadingMessage: '线下价格加载中…',
+    emptyMessage: '没有匹配到线下价格数据。',
+    errorPrefix: '线下价格查询失败',
+    columns: [
+      {key: 'id', label: 'ID'},
+      {key: 'source_name', label: '数据源'},
+      {key: 'market_name', label: '市场'},
+      {key: 'region', label: '地区'},
+      {key: 'product_type', label: '品种'},
+      {key: 'product_name_raw', label: '原始品名', maxLen: 30},
+      {key: 'min_price', label: '最低价'},
+      {key: 'max_price', label: '最高价'},
+      {key: 'price', label: '均价'},
+      {key: 'unit', label: '单位'},
+      {key: 'storage_method', label: '储存方式'},
+      {key: 'snapshot_time', label: '采集时间'},
+    ],
+  });
 }
 
-/* ── CSV 导入 ───────────────────────── */
 async function importCsv() {
-  const fileInput = document.getElementById('csvFileInput');
-  if (!fileInput.files.length) { alert('请先选择 CSV 文件'); return; }
+  const fileInput = getEl('csvFileInput');
+  const resultEl = getEl('csvResult');
+  if (!fileInput.files.length) {
+    resultEl.textContent = '请先选择 CSV 文件';
+    resultEl.style.color = 'var(--error)';
+    return;
+  }
   const fd = new FormData();
   fd.append('file', fileInput.files[0]);
-  const el = document.getElementById('csvResult');
-  el.textContent = '导入中...';
+  resultEl.textContent = '导入中...';
+  resultEl.style.color = 'var(--text-secondary)';
   try {
-    const r = await fetch('/api/import/csv', { method: 'POST', body: fd });
-    const d = await r.json();
-    if (d.error) { el.textContent = '✖ ' + d.error; el.style.color = 'var(--error)'; }
-    else { el.textContent = `✔ 导入 ${d.inserted} 条，跳过 ${d.skipped} 条，错误 ${d.errors} 条`; el.style.color = 'var(--success)'; loadStats(); }
-  } catch(e) { el.textContent = '导入失败: ' + e.message; el.style.color = 'var(--error)'; }
-}
-
-/* ── 爬虫选择联动 ─────────────────── */
-function onCrawlerChange() {
-  const v = document.getElementById('crawlerSelect').value;
-  const kwGroup = document.getElementById('keywordGroup');
-  const kwInput = document.getElementById('keywordInput');
-  // MOA政策、MOA价格、虹鳟专用不需要关键词（有默认值）
-  if (['moa', 'moa_prices'].includes(v)) {
-    kwInput.placeholder = '无需填写';
-    kwInput.value = '';
-  } else if (v === 'salmon') {
-    kwInput.placeholder = '默认：虹鳟,帝王鲑,帝王三文鱼';
-    kwInput.value = '虹鳟,帝王鲑';
-  } else {
-    kwInput.placeholder = '如：三文鱼、大黄鱼、虹鳟...';
+    const data = await fetchJson('/api/import/csv', {method: 'POST', body: fd});
+    resultEl.textContent = `导入 ${formatCount(data.inserted)} 条，跳过 ${formatCount(data.skipped)} 条，错误 ${formatCount(data.errors)} 条`;
+    resultEl.style.color = 'var(--success)';
+    loadStats();
+  } catch (error) {
+    resultEl.textContent = `导入失败：${formatError(error)}`;
+    resultEl.style.color = 'var(--error)';
   }
 }
 
-/* ═══════════════════════════════════════════════ */
-/*           📊 数据总览仪表盘逻辑               */
-/* ═══════════════════════════════════════════════ */
+function onCrawlerChange() {
+  const value = getEl('crawlerSelect').value;
+  const keywordInput = getEl('keywordInput');
+  if (['moa', 'moa_prices'].includes(value)) {
+    keywordInput.placeholder = '无需填写';
+    keywordInput.value = '';
+  } else if (value === 'salmon') {
+    keywordInput.placeholder = '默认：虹鳟,帝王鲑,帝王三文鱼';
+    keywordInput.value = '虹鳟,帝王鲑';
+  } else {
+    keywordInput.placeholder = '如：三文鱼、大黄鱼、虹鳟...';
+  }
+}
 
-const PLOTLY_LAYOUT_BASE = {
-  paper_bgcolor: '#fff', plot_bgcolor: '#fff',
-  margin: {l: 50, r: 20, t: 40, b: 40},
-  font: {family: '"Microsoft YaHei", sans-serif', size: 12},
-};
-const PLOTLY_CFG = {displayModeBar: false, responsive: true};
+function setDashboardLoadingStates() {
+  renderState('dailyTrendChart', 'loading', '每日采集量趋势加载中…', {lines: 5});
+  renderState('sourceDistChart', 'loading', '数据来源分布加载中…', {lines: 4});
+  renderState('priceTrendChart', 'loading', '品种价格趋势加载中…', {lines: 5});
+  renderState('speciesOriginChart', 'loading', '品种-产地均价对比加载中…', {lines: 4});
+  renderState('priceRankingTable', 'loading', '价格排行加载中…', {lines: 5, compact: true});
+  renderState('crawlRunsTable', 'loading', '运行记录加载中…', {lines: 5, compact: true});
+}
 
-async function loadDashboard() {
+function createRunStatusBadge(status) {
+  const cls = status === 'OK' ? 'done' : status === 'RUNNING' ? 'running' : 'error';
+  return createNode('span', {className: `status-badge status-${cls}`, text: textOrDash(status)});
+}
+
+async function loadStats() {
   try {
-    await Promise.all([
-      loadOverview(),
-      loadDailyTrend(),
-      loadPriceTrend(),
-      loadSpeciesOrigin(),
-      loadPriceRanking(),
-      loadCrawlRuns(),
-    ]);
-  } catch(e) { console.error('Dashboard load error:', e); }
+    const data = await fetchJson('/api/stats');
+    renderStatsBar(data);
+  } catch (error) {
+    renderStatsError(`统计加载失败：${formatError(error)}`);
+  }
 }
 
 async function loadOverview() {
-  const r = await fetch('/api/dashboard/overview');
-  const d = await r.json();
-  if (d.error) return;
-  const c = d.counts || {};
-  document.getElementById('mc-papers').textContent = (c.papers || 0).toLocaleString();
-  document.getElementById('mc-products').textContent = (c.products || 0).toLocaleString();
-  document.getElementById('mc-intel').textContent = (c.intel_items || 0).toLocaleString();
-  document.getElementById('mc-runs').textContent = (c.crawl_runs || 0).toLocaleString();
-
-  // 来源分布饼图
-  const srcStats = d.source_stats || [];
-  if (srcStats.length > 0) {
+  try {
+    const data = await fetchJson('/api/dashboard/overview');
+    setMetricValues(data.counts || {});
+    const kpis = data.kpis || {};
+    renderKpiCards('dashboardKpis', [
+      {
+        label: '全网监测均价（¥/kg）',
+        value: formatCurrency(kpis.monitor_avg_price),
+        caption: `近${kpis.window_days || 30}天线上与线下联合监测均值`,
+        accent: 'accent-blue',
+      },
+      {
+        label: '线上/线下最大价差',
+        value: formatCurrency(kpis.online_offline_spread),
+        caption: '用于突出渠道价差与市场敏感度',
+        accent: 'accent-teal',
+      },
+      {
+        label: '近30天采集样本量',
+        value: formatCount(kpis.sample_count_30d),
+        caption: '覆盖论文、价格、政策与线下市场样本',
+        accent: 'accent-amber',
+      },
+    ]);
+    renderSystemMeta('dashboardMeta', [
+      DEMO_MODE ? '运行模式：演示稳定模式' : '运行模式：实时采集链路',
+      `监测窗口：近 ${kpis.window_days || 30} 天`,
+      '指标口径：线上零售 + 线下批发联合分析',
+    ]);
+    const sourceStats = data.source_stats || [];
+    if (!sourceStats.length) {
+      renderState('sourceDistChart', 'empty', '当前暂无可视化的数据来源记录。');
+      return;
+    }
+    const rankedStats = [...sourceStats].sort((a, b) => Number(a.count) - Number(b.count));
     Plotly.newPlot('sourceDistChart', [{
-      type: 'pie',
-      labels: srcStats.map(x => x.source_type),
-      values: srcStats.map(x => x.count),
-      textinfo: 'label+percent',
-      hole: 0.35,
-      marker: {colors: ['#1677ff','#52c41a','#faad14','#ff4d4f','#722ed1','#13c2c2']},
-    }], {...PLOTLY_LAYOUT_BASE, title: '', margin: {l: 20, r: 20, t: 10, b: 10}}, PLOTLY_CFG);
-  } else {
-    document.getElementById('sourceDistChart').innerHTML = '<div class="no-data">暂无数据</div>';
+      type: 'bar',
+      orientation: 'h',
+      name: '来源样本量',
+      showlegend: true,
+      x: rankedStats.map(item => Number(item.count)),
+      y: rankedStats.map(item => item.source_type),
+      text: rankedStats.map(item => formatCount(item.count)),
+      textposition: 'outside',
+      cliponaxis: false,
+      marker: {
+        color: rankedStats.map((_, index) => [ACADEMIC_PALETTE.navy, ACADEMIC_PALETTE.blue, ACADEMIC_PALETTE.teal, ACADEMIC_PALETTE.cyan, ACADEMIC_PALETTE.amber][index % 5]),
+      },
+      hovertemplate: '%{y}<br>样本量: %{x} 条<extra>来源样本量</extra>',
+    }], buildPlotLayout({
+      title: '多源异构数据来源覆盖分布',
+      xTitle: '样本量（条）',
+      yTitle: '数据来源',
+      legendY: -0.26,
+      extra: {
+        margin: {l: 128, r: 40, t: 82, b: 72},
+        xaxis: {...buildAxis('样本量（条）'), rangemode: 'tozero'},
+        yaxis: {...buildAxis('数据来源'), automargin: true},
+      },
+    }), PLOTLY_CFG);
+  } catch (error) {
+    setMetricValues({});
+    renderSystemMeta('dashboardMeta', [
+      DEMO_MODE ? '运行模式：演示稳定模式' : '运行模式：实时采集链路',
+      '总览状态：指标加载失败',
+    ]);
+    renderState('sourceDistChart', 'error', `来源分布加载失败：${formatError(error)}`);
   }
 }
 
 async function loadDailyTrend() {
-  const r = await fetch('/api/dashboard/daily_trend?days=30');
-  const d = await r.json();
-  const rows = d.data || [];
-  if (rows.length === 0) {
-    document.getElementById('dailyTrendChart').innerHTML = '<div class="no-data">暂无数据</div>';
-    return;
+  try {
+    const data = await fetchJson('/api/dashboard/daily_trend?days=30');
+    const rows = data.data || [];
+    if (!rows.length) {
+      renderState('dailyTrendChart', 'empty', '近 30 天暂无新增采集记录。');
+      return;
+    }
+    Plotly.newPlot('dailyTrendChart', [
+      {
+        x: rows.map(row => row.date),
+        y: rows.map(row => row.intel_items),
+        name: '情报条目',
+        type: 'scatter',
+        mode: 'lines+markers',
+        line: {width: 3.5, color: ACADEMIC_PALETTE.blue},
+        marker: {size: 7, color: ACADEMIC_PALETTE.blue},
+        hovertemplate: '%{x}<br>情报条目: %{y} 条<extra></extra>',
+      },
+      {
+        x: rows.map(row => row.date),
+        y: rows.map(row => row.products),
+        name: '商品快照',
+        type: 'scatter',
+        mode: 'lines+markers',
+        line: {width: 3.5, color: ACADEMIC_PALETTE.teal},
+        marker: {size: 7, color: ACADEMIC_PALETTE.teal},
+        hovertemplate: '%{x}<br>商品快照: %{y} 条<extra></extra>',
+      },
+    ], buildPlotLayout({
+      title: '近30天多源采集量时序变化',
+      xTitle: '日期',
+      yTitle: '新增采集量（条）',
+      legendY: -0.24,
+    }), PLOTLY_CFG);
+  } catch (error) {
+    renderState('dailyTrendChart', 'error', `趋势图加载失败：${formatError(error)}`);
   }
-  const traces = [
-    {x: rows.map(r => r.date), y: rows.map(r => r.intel_items), name: '情报条目', type: 'scatter', mode: 'lines+markers', line: {width: 3, color: '#1677ff'}, marker: {size: 6}},
-    {x: rows.map(r => r.date), y: rows.map(r => r.products), name: '商品快照', type: 'scatter', mode: 'lines+markers', line: {width: 3, color: '#52c41a'}, marker: {size: 6}},
-  ];
-  Plotly.newPlot('dailyTrendChart', traces, {
-    ...PLOTLY_LAYOUT_BASE, xaxis: {title: '日期'}, yaxis: {title: '新增条数'},
-    legend: {orientation: 'h', y: 1.12},
-  }, PLOTLY_CFG);
 }
 
 async function loadPriceTrend() {
-  const r = await fetch('/api/dashboard/price_trend?days=90');
-  const d = await r.json();
-  const rows = d.data || [];
-  if (rows.length === 0) {
-    document.getElementById('priceTrendChart').innerHTML = '<div class="no-data">暂无数据</div>';
-    return;
+  try {
+    const data = await fetchJson('/api/dashboard/price_trend?days=90');
+    const rows = data.data || [];
+    if (!rows.length) {
+      renderState('priceTrendChart', 'empty', '近 90 天暂无价格趋势数据。');
+      return;
+    }
+    const grouped = {};
+    const colors = [
+      ACADEMIC_PALETTE.navy,
+      ACADEMIC_PALETTE.blue,
+      ACADEMIC_PALETTE.teal,
+      ACADEMIC_PALETTE.cyan,
+      ACADEMIC_PALETTE.amber,
+      ACADEMIC_PALETTE.red,
+      ACADEMIC_PALETTE.indigo,
+    ];
+    rows.forEach(row => {
+      const key = row.product_type || '未知';
+      if (!grouped[key]) grouped[key] = {x: [], y: []};
+      grouped[key].x.push(row.date);
+      grouped[key].y.push(Number(row.avg_price));
+    });
+    const traces = Object.entries(grouped).map(([name, points], index) => ({
+      x: points.x,
+      y: points.y,
+      name,
+      type: 'scatter',
+      mode: 'lines+markers',
+      line: {width: 3.2, color: colors[index % colors.length]},
+      marker: {size: 6, color: colors[index % colors.length]},
+      hovertemplate: '%{x}<br>%{fullData.name}: %{y:.1f} ¥/kg<extra></extra>',
+    }));
+    Plotly.newPlot('priceTrendChart', traces, buildPlotLayout({
+      title: '重点品种监测均价趋势对比',
+      xTitle: '日期',
+      yTitle: '监测均价（¥/kg）',
+      legendY: -0.22,
+    }), PLOTLY_CFG);
+  } catch (error) {
+    renderState('priceTrendChart', 'error', `价格趋势加载失败：${formatError(error)}`);
   }
-  // 按品种分组
-  const grouped = {};
-  const COLORS = ['#1677ff','#ff4d4f','#52c41a','#faad14','#722ed1','#13c2c2','#eb2f96'];
-  for (const row of rows) {
-    const key = row.product_type || '未知';
-    if (!grouped[key]) grouped[key] = {x: [], y: []};
-    grouped[key].x.push(row.date);
-    grouped[key].y.push(Number(row.avg_price));
-  }
-  const traces = Object.entries(grouped).map(([name, data], i) => ({
-    x: data.x, y: data.y, name, type: 'scatter', mode: 'lines+markers',
-    line: {width: 3, color: COLORS[i % COLORS.length]}, marker: {size: 5},
-  }));
-  Plotly.newPlot('priceTrendChart', traces, {
-    ...PLOTLY_LAYOUT_BASE, xaxis: {title: '日期'}, yaxis: {title: '均价（元）'},
-    legend: {orientation: 'h', y: 1.1},
-  }, PLOTLY_CFG);
 }
 
 async function loadSpeciesOrigin() {
-  const r = await fetch('/api/dashboard/species_origin?days=30');
-  const d = await r.json();
-  const rows = d.data || [];
-  if (rows.length === 0) {
-    document.getElementById('speciesOriginChart').innerHTML = '<div class="no-data">暂无数据</div>';
-    return;
+  try {
+    const data = await fetchJson('/api/dashboard/species_origin?days=30');
+    const rows = data.data || [];
+    if (!rows.length) {
+      renderState('speciesOriginChart', 'empty', '近 30 天暂无品种-产地均价数据。');
+      return;
+    }
+    const origins = [...new Set(rows.map(row => row.origin))];
+    const species = [...new Set(rows.map(row => row.product_type))];
+    const colors = [
+      ACADEMIC_PALETTE.navy,
+      ACADEMIC_PALETTE.blue,
+      ACADEMIC_PALETTE.teal,
+      ACADEMIC_PALETTE.cyan,
+      ACADEMIC_PALETTE.amber,
+      ACADEMIC_PALETTE.indigo,
+    ];
+    const traces = origins.map((origin, index) => ({
+      x: species,
+      name: origin,
+      type: 'bar',
+      marker: {color: colors[index % colors.length]},
+      y: species.map(productType => {
+        const match = rows.find(row => row.product_type === productType && row.origin === origin);
+        return match ? Number(match.avg_price) : 0;
+      }),
+      hovertemplate: `${origin}<br>%{x}: %{y:.1f} ¥/kg<extra></extra>`,
+    }));
+    Plotly.newPlot('speciesOriginChart', traces, buildPlotLayout({
+      title: '品种与产地交叉均价对比',
+      xTitle: '品种类别',
+      yTitle: '监测均价（¥/kg）',
+      legendY: -0.26,
+      extra: {
+        barmode: 'group',
+        xaxis: {...buildAxis('品种类别'), tickangle: -10},
+      },
+    }), PLOTLY_CFG);
+  } catch (error) {
+    renderState('speciesOriginChart', 'error', `产地对比加载失败：${formatError(error)}`);
   }
-  // 分组柱状图: x=品种, 同一品种下不同产地为不同 trace
-  const origins = [...new Set(rows.map(r => r.origin))];
-  const species = [...new Set(rows.map(r => r.product_type))];
-  const COLORS = ['#1677ff','#ff4d4f','#52c41a','#faad14','#722ed1','#13c2c2'];
-  const traces = origins.map((origin, i) => ({
-    x: species, name: origin, type: 'bar',
-    marker: {color: COLORS[i % COLORS.length]},
-    y: species.map(sp => {
-      const match = rows.find(r => r.product_type === sp && r.origin === origin);
-      return match ? Number(match.avg_price) : 0;
-    }),
-  }));
-  Plotly.newPlot('speciesOriginChart', traces, {
-    ...PLOTLY_LAYOUT_BASE, barmode: 'group',
-    xaxis: {title: '品种'}, yaxis: {title: '均价（元）'},
-    legend: {orientation: 'h', y: 1.15},
-  }, PLOTLY_CFG);
 }
 
 async function loadPriceRanking() {
-  const r = await fetch('/api/dashboard/price_ranking?order=price_desc&limit=10');
-  const d = await r.json();
-  const rows = d.data || [];
-  const el = document.getElementById('priceRankingTable');
-  if (rows.length === 0) { el.innerHTML = '<div class="no-data">暂无数据</div>'; return; }
-  let html = '<table><thead><tr><th>#</th><th>商品名称</th><th>平台</th><th>价格</th><th>产地</th><th>采集时间</th></tr></thead><tbody>';
-  rows.forEach((row, i) => {
-    const title = (row.title || '').length > 30 ? row.title.substring(0, 30) + '…' : (row.title || '');
-    html += `<tr><td>${i + 1}</td><td title="${(row.title||'').replace(/"/g,'&quot;')}">${title}</td><td>${row.platform || '-'}</td><td style="font-weight:600;color:var(--error)">¥${row.price || '-'}</td><td>${row.origin_standardized || '-'}</td><td>${row.snapshot_time || '-'}</td></tr>`;
-  });
-  html += '</tbody></table>';
-  el.innerHTML = html;
+  try {
+    const data = await fetchJson('/api/dashboard/price_ranking?order=price_desc&limit=10');
+    renderTable('priceRankingTable', [
+      {label: '#', render: (_, index) => String(index + 1)},
+      {key: 'title', label: '商品名称', maxLen: 30},
+      {key: 'platform', label: '平台'},
+      {
+        label: '价格',
+        render: row => createNode('span', {
+          className: 'price-pill',
+          text: row.price === null || row.price === undefined || row.price === '' ? '-' : `¥${row.price}`,
+        }),
+      },
+      {key: 'origin_standardized', label: '产地'},
+      {key: 'snapshot_time', label: '采集时间'},
+    ], data.data || [], {emptyMessage: '暂无商品价格排行数据。'});
+  } catch (error) {
+    renderState('priceRankingTable', 'error', `价格排行加载失败：${formatError(error)}`, {compact: true});
+  }
 }
 
 async function loadCrawlRuns() {
-  const r = await fetch('/api/dashboard/crawl_runs?limit=15');
-  const d = await r.json();
-  const rows = d.data || [];
-  const el = document.getElementById('crawlRunsTable');
-  if (rows.length === 0) { el.innerHTML = '<div class="no-data">暂无运行记录</div>'; return; }
-  let html = '<table><thead><tr><th>数据源</th><th>状态</th><th>条数</th><th>开始时间</th><th>结束时间</th><th>错误</th></tr></thead><tbody>';
-  rows.forEach(row => {
-    const statusCls = row.status === 'OK' ? 'done' : row.status === 'RUNNING' ? 'running' : 'error';
-    html += `<tr><td>${row.source_name || '-'}</td><td><span class="status-badge status-${statusCls}">${row.status || '-'}</span></td><td>${row.items ?? '-'}</td><td>${row.started_at || '-'}</td><td>${row.ended_at || '-'}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${(row.error_text||'').replace(/"/g,'&quot;')}">${row.error_text || '-'}</td></tr>`;
-  });
-  html += '</tbody></table>';
-  el.innerHTML = html;
+  try {
+    const data = await fetchJson('/api/dashboard/crawl_runs?limit=15');
+    renderTable('crawlRunsTable', [
+      {key: 'source_name', label: '数据源'},
+      {label: '状态', render: row => createRunStatusBadge(row.status)},
+      {key: 'items', label: '条数'},
+      {key: 'started_at', label: '开始时间'},
+      {key: 'ended_at', label: '结束时间'},
+      {key: 'error_text', label: '错误', maxLen: 40},
+    ], data.data || [], {emptyMessage: '暂无运行记录。'});
+  } catch (error) {
+    renderState('crawlRunsTable', 'error', `运行记录加载失败：${formatError(error)}`, {compact: true});
+  }
 }
 
-// 页面加载时初始化仪表盘
-loadDashboard();
+async function loadDashboard() {
+  setDashboardLoadingStates();
+  await Promise.allSettled([
+    loadOverview(),
+    loadDailyTrend(),
+    loadPriceTrend(),
+    loadSpeciesOrigin(),
+    loadPriceRanking(),
+    loadCrawlRuns(),
+  ]);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initStaticStates();
+  hydrateRouteLinks();
+  activateTab('dashboard');
+  onCrawlerChange();
+  loadStats();
+  loadDashboard();
+});
 </script>
 </body>
 </html>

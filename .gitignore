@@ -65,6 +65,7 @@ dist/
 
 # Windows artifact
 nul
+battery-report.html
 
 # Finetune local artifacts
 finetune/.cache/

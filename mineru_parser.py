@@ -6,7 +6,7 @@ MinerU 深度版面解析管线
     from mineru_parser import parse_pdf_with_mineru, evaluate_availability
 
 安装依赖：
-    pip install magic-pdf[full] --extra-index-url https://wheels.myhloli.com
+    pip install -r requirements-ocr.txt
 """
 
 from __future__ import annotations
